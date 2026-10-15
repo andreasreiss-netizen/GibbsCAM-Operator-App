@@ -31,13 +31,15 @@ check part_open, "Bitte zuerst das zugehoerige Teil in GibbsCAM oeffnen."
 PRUEFE_WERKZEUG = 1
 SICHERUNG = 1
 MAXZEILEN = 500
-! Sperre gegen Ueberschreiben durch Redo:
-!  -1 = keine Sperre setzen (nur den aktuellen Sperrwert protokollieren)
-!  >=0 = diesen Sperrwert (locks) in jede geaenderte Operation schreiben.
-! Den passenden Wert ermitteln: in GibbsCAM bei einer Operation Drehzahl
-! und Vorschub von Hand sperren, dieses Makro mit SPERRWERT = -1 laufen
-! lassen und den protokollierten Wert (locks) hier eintragen.
-SPERRWERT = -1
+! Sperre gegen Ueberschreiben durch Redo (Schloss-Symbole im
+! Operationsdialog). Ermittelt am 15.10.2026, GibbsCAM 2027:
+! Drehzahl + Contour Feed gesperrt ergibt locks = 8704 = 8192 + 512.
+!  SPERREN = 1 : beide Bits in jeder geaenderten Operation setzen,
+!                vorhandene andere Sperren bleiben erhalten
+!  SPERREN = 0 : nur protokollieren
+SPERREN = 1
+BIT_A = 8192
+BIT_B = 512
 
 ! ---- Begleitdatei waehlen ----
 file_dialog_new "Shopfloor Companion - Begleitdatei (_Op.txt) waehlen"
@@ -126,11 +128,14 @@ for i = 1 to MAXZEILEN
 
 :zeilefertig
     get_op_data iop, locks, lockalt
-    if SPERRWERT>=0 then set_op_data iop, locks, SPERRWERT
+    lockneu = lockalt
+    bitgesetzt = int(lockneu/BIT_A) - 2*int(lockneu/(2*BIT_A))
+    if bitgesetzt=0 then lockneu = lockneu + BIT_A
+    bitgesetzt = int(lockneu/BIT_B) - 2*int(lockneu/(2*BIT_B))
+    if bitgesetzt=0 then lockneu = lockneu + BIT_B
+    if SPERREN=1 then set_op_data iop, locks, lockneu
     get_op_data iop, locks, lockneu
-    lockalt$ = trim$(format$(lockalt, "#########0"))
-    lockneu$ = trim$(format$(lockneu, "#########0"))
-    zeile$ = zeile$ + " locks: " + lockalt$ + " -> " + lockneu$
+    zeile$ = zeile$ + " locks: %lockalt -> %lockneu"
     ngeaendert = ngeaendert + 1
     log$ = log$ + "\n" + zeile$
 next i
