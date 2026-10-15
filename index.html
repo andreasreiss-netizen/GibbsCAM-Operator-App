@@ -52,6 +52,11 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 header h1{font-size:17px;font-weight:600;margin:0;letter-spacing:-.01em}
 header .prog{color:var(--ink-2);font-size:14px}
 header .spacer{flex:1}
+.lockmode{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line-strong);border-radius:999px;padding:2px 2px 2px 10px;background:var(--surface)}
+.lockmode .lbl{font-size:13px;color:var(--ink-2);margin-right:6px}
+.lockmode button{border:none;background:transparent;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:500;color:var(--ink-2)}
+.lockmode button[aria-checked="true"]{background:var(--accent);color:var(--accent-ink)}
+.lockmode[aria-disabled="true"]{opacity:.45;pointer-events:none}
 .btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:var(--radius-s);padding:8px 14px;font-weight:500;font-size:14px}
 .btn:hover{background:var(--surface-2)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -161,11 +166,12 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <h1>Shopfloor Companion</h1>
   <span class="prog" id="progLabel"></span>
   <span class="spacer"></span>
-  <button class="btn quiet" id="btnLoad">Export laden</button>
-  <button class="btn quiet" id="btnImgs" disabled>Bilder zuordnen</button>
   <button class="btn quiet" id="btnXlsx">Report laden</button>
-  <button class="btn quiet" id="btnReset" disabled>Alle zurücksetzen</button>
-  <button class="btn quiet" id="btnExport" disabled>JSON exportieren</button>
+  <div class="lockmode" role="radiogroup" aria-label="Beim Speichern sperren" id="lockMode">
+    <span class="lbl">Sperren</span>
+    <button type="button" role="radio" data-v="changed" aria-checked="true">nur geänderte</button>
+    <button type="button" role="radio" data-v="all" aria-checked="false">alle Werte</button>
+  </div>
   <button class="btn primary" id="btnSave" disabled>Speichern</button>
   <input type="file" id="fileJson" accept=".json,application/json">
   <input type="file" id="fileImg" accept="image/*">
@@ -267,10 +273,8 @@ function setData(d){
 // ---------- Rendering ----------
 function render(){
   if(!data){ renderEmpty(); return; }
-  $("#btnReset").disabled = false;
-  $("#btnExport").disabled = false;
   $("#btnSave").disabled = false;
-  $("#btnImgs").disabled = false;
+  $("#lockMode").setAttribute("aria-disabled","false");
   app.innerHTML = `
   <div class="layout">
     <nav class="oplist" aria-label="Operationen">
@@ -285,8 +289,8 @@ function render(){
 
 function renderEmpty(){
   $("#progLabel").textContent = "";
-  $("#btnReset").disabled = true; $("#btnExport").disabled = true; $("#btnSave").disabled = true;
-  $("#btnImgs").disabled = true;
+  $("#btnSave").disabled = true;
+  $("#lockMode").setAttribute("aria-disabled","true");
   app.innerHTML = `
   <div class="empty" id="drop">
     <h2>Rüstplan laden</h2>
@@ -448,8 +452,11 @@ function setImage(opNo,file){
 }
 $("#fileJson").addEventListener("change",e=>{ const f=e.target.files[0]; if(f) readJson(f); e.target.value=""; });
 $("#fileImg").addEventListener("change",e=>{ const f=e.target.files[0]; if(f&&data) setImage(data.ops[current].opNo,f); e.target.value=""; });
-$("#btnLoad").onclick = ()=>$("#fileJson").click();
-$("#btnImgs").onclick = ()=>$("#fileImgs").click();
+let lockMode = "changed";
+try{ lockMode = localStorage.getItem("sfc:lockMode")==="all" ? "all" : "changed"; }catch(e){}
+function renderLockMode(){ $("#lockMode").querySelectorAll("button").forEach(b=>b.setAttribute("aria-checked", b.dataset.v===lockMode ? "true":"false")); }
+$("#lockMode").querySelectorAll("button").forEach(b=>b.onclick=()=>{ lockMode=b.dataset.v; try{ localStorage.setItem("sfc:lockMode",lockMode); }catch(e){} renderLockMode(); });
+renderLockMode();
 $("#btnXlsx").onclick = ()=>$("#fileXlsx").click();
 
 // Mehrere Bilder: Zuordnung ueber die Zahl im Dateinamen (Op6.png, op_06.jpg, 6.png)
@@ -639,8 +646,8 @@ async function mapSheetDrawings(zip){
 $("#fileXlsx").addEventListener("change",e=>{ const f=e.target.files[0]; e.target.value=""; if(f) importReport(f); });
 
 // ---------- Speichern: Report-Kopie (_Op.xlsx) + Begleitdatei für das Makro (_Op.txt) ----------
-function changedRows(){
-  return data.ops.filter(o=>isChanged(o.opNo)).map(o=>{ const ov=overrides[o.opNo];
+function changedRows(all){
+  return data.ops.filter(o=>all || isChanged(o.opNo)).map(o=>{ const ov=overrides[o.opNo]||{feedPct:100,rpmPct:100};
     const rpm = o.rpm!=null ? Math.round(o.rpm*ov.rpmPct/100) : null;
     const feed = o.feed!=null ? (o.feedPerRev ? Math.round(o.feed*ov.feedPct/100*10000)/10000 : Math.round(o.feed*ov.feedPct/100*100)/100) : null;
     return {op:o, rpm, feed};
@@ -649,14 +656,14 @@ function changedRows(){
 function buildTxt(rows){
   // Eine Zeile je Operation, leerzeichengetrennt, Dezimalpunkt:
   // OpNr WerkzeugNr Drehzahl Vorschub VorschubProUmdrehung(0/1) GeändertRPM(0/1) GeändertFeed(0/1)
-  return rows.map(r=>{ const ov=overrides[r.op.opNo];
+  return rows.map(r=>{ const ov=overrides[r.op.opNo]||{feedPct:100,rpmPct:100};
     return [r.op.opNo, r.op.toolNumber ?? (r.op.toolId? String(r.op.toolId).replace(/^T/,"") : 0), r.rpm ?? 0, r.feed ?? 0, r.op.feedPerRev?1:0, ov.rpmPct!==100?1:0, ov.feedPct!==100?1:0].join(" ");
   }).join("\r\n")+"\r\n";
 }
 async function buildXlsxCopy(rows){
   const zip = await JSZip.loadAsync(reportBuf);
   const bySheet = {};
-  rows.forEach(r=>{ const ov=overrides[r.op.opNo]; if(!r.op.cells) return; const p=sheetPaths[r.op.sheet]; if(!p) return;
+  rows.forEach(r=>{ const ov=overrides[r.op.opNo]||{feedPct:100,rpmPct:100}; if(!r.op.cells) return; const p=sheetPaths[r.op.sheet]; if(!p) return;
     (bySheet[p] ||= []);
     if(ov.rpmPct!==100 && r.op.cells.rpm && r.rpm!=null) bySheet[p].push({addr:r.op.cells.rpm, val:r.rpm});
     if(ov.feedPct!==100 && r.op.cells.feed && r.feed!=null) bySheet[p].push({addr:r.op.cells.feed, val:r.feed});
@@ -680,8 +687,9 @@ async function buildXlsxCopy(rows){
 }
 async function saveAll(){
   if(!data) return;
-  const rows = changedRows();
+  const rows = changedRows(lockMode==="all");
   if(!rows.length){ toast("Keine Änderungen – nichts zu speichern"); return; }
+  const nChanged = rows.filter(r=>isChanged(r.op.opNo)).length;
   const base = (reportName ? reportName.replace(/\.xlsx$/i,"") : (data.programId||"Ruestplan")).replace(/[\\\/:*?"<>|]+/g,"_") + "_Op";
   const txt = buildTxt(rows);
   if(!downloads){
@@ -702,7 +710,8 @@ async function saveAll(){
     try{ await downloads.save({filename: base+".txt", data: txt}); saved=1; }
     catch(e){ if(e && e.code==="declined"){ toast("Speichern abgebrochen"); return; } toast("Begleitdatei konnte nicht gespeichert werden"); return; }
   }
-  toast(saved===2 ? rows.length+" Operationen gespeichert in "+base+".zip (.xlsx + .txt)" : base+".txt gespeichert");
+  const what = lockMode==="all" ? nChanged+" geändert, alle "+rows.length+" Operationen gesperrt" : rows.length+" Operationen geändert und gesperrt";
+  toast(saved===2 ? what+" – "+base+".zip (.xlsx + .txt)" : what+" – "+base+".txt");
 }
 $("#btnSave").onclick = saveAll;
 
@@ -727,7 +736,7 @@ async function exportChanges(){
   try{ await navigator.clipboard.writeText(text); toast("JSON in die Zwischenablage kopiert"); }
   catch(e){ toast("Export nicht möglich in dieser Ansicht"); }
 }
-$("#btnExport").onclick = exportChanges;
+// JSON-Export bleibt als Funktion erhalten (für den Bridge-Dienst), ohne Schaltfläche.
 
 // Speichern: in claude.ai über die Download-Capability, sonst Browser-Download
 // bzw. iOS-Teilen-Menü (Dateien, AirDrop, Mail).
