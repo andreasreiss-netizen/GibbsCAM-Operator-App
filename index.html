@@ -605,8 +605,13 @@ async function bmpToPngBlob(buf){
 
 async function mapSheetDrawings(zip){
   const out={};
-  const parse = async p=>{ const f=zip.file(p); return f? new DOMParser().parseFromString(await f.async("string"),"application/xml") : null; };
-  const relsOf = async p=>{ const d=await parse(p); const m={}; if(d) [...d.getElementsByTagName("Relationship")].forEach(r=>m[r.getAttribute("Id")]={target:r.getAttribute("Target"),type:r.getAttribute("Type")||""}); return m; };
+  // Safari (iOS/iPadOS) verwirft XML mit fuehrender Byte-Order-Markierung; Chrome ueberliest sie.
+  const clean = t=>t.replace(/^\uFEFF/,"").replace(/^\s+/,"");
+  const parse = async p=>{ const f=zip.file(p); if(!f) return null; const d=new DOMParser().parseFromString(clean(await f.async("string")),"application/xml"); return d.getElementsByTagName("parsererror").length? null : d; };
+  // Relationships per Textmuster lesen – unabhaengig vom XML-Parser des Browsers
+  const relsOf = async p=>{ const f=zip.file(p); const m={}; if(!f) return m; const t=clean(await f.async("string"));
+    for(const tag of t.match(/<Relationship\b[^>]*>/g)||[]){ const g=a=>{ const x=tag.match(new RegExp(a+'="([^"]*)"')); return x? x[1] : ""; }; const id=g("Id"); if(id) m[id]={target:g("Target"),type:g("Type")}; }
+    return m; };
   const wbx = await parse("xl/workbook.xml"); if(!wbx) return out;
   const wbRels = await relsOf("xl/_rels/workbook.xml.rels");
   for(const sh of [...wbx.getElementsByTagNameNS("*","sheet")]){
