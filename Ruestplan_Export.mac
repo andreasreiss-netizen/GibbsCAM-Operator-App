@@ -1,0 +1,319 @@
+! ============================================================
+! Ruestplan_Export.mac   -   Shopfloor Companion Export  v0.1
+! ------------------------------------------------------------
+! Schreibt Teil-, Werkzeug-, Koordinatensystem- und
+! Operationsdaten des geoeffneten GibbsCAM-Teils in eine
+! JSON-Datei neben der Teiledatei:  <Teilename>.setup.json
+!
+! WICHTIGE EINSCHRAENKUNGEN DER GIBBSCAM-MAKROSPRACHE:
+!  1. Zeichenketten duerfen KEIN Anfuehrungszeichen enthalten.
+!     Das Makro schreibt deshalb die Tilde ~ als Platzhalter.
+!     Der Bridge-Dienst (oder ein Editor) ersetzt ~ durch das
+!     JSON-Anfuehrungszeichen. Alternative, falls deine Version
+!     chr$ unterstuetzt: q$ = chr$(34)  (dann ist die Datei
+!     sofort gueltiges JSON).
+!  2. Einruecken nur mit Leerzeichen, keine Tabs.
+!  3. Zwischen Argumenten: Komma UND Leerzeichen.
+!  4. Werkzeugtyp (mtool_type) kommt als Zahl 1-20; die
+!     Zuordnung zu Klartext macht der Bridge-Dienst.
+!  5. Satznummern (ncBlockRange) liefert das Makro nicht,
+!     die kommen aus dem Postprozessor.
+! ============================================================
+
+check part_open, "Bitte zuerst ein Teil in GibbsCAM oeffnen."
+
+q$ = "~"
+c$ = ","
+nf$ = "########0.0###"
+
+! ------------------------------------------------------------
+! Zieldatei: Windows-Speichern-Dialog, Ordner frei waehlbar
+! ------------------------------------------------------------
+get_part_data part_file, pfile$
+get_part_data part_name, pname$
+
+a$ = "Ruestplan speichern - Vorschlag: " + pname$ + ".setup.json"
+file_dialog_new a$
+file_dialog_extension "JSON-Dateien (*.json)", "json"
+file_dialog_extension "Alle Dateien (*.*)", "*"
+f$ = ""
+file_dialog_show save, f$
+if len(f$)<1 then stop "Export abgebrochen - keine Datei gewaehlt."
+
+! Endung .json ergaenzen, falls der Anwender keine eingegeben hat
+ilen = len(f$)
+ext$ = lcase$(right$(f$, 5))
+if ext$<>".json" then f$ = f$ + ".json"
+
+fopen = 0
+file_open 1, f$, write
+if FileError<>0 then goto file_error
+fopen = 1
+
+! ------------------------------------------------------------
+! Kopf
+! ------------------------------------------------------------
+file_write_text 1, "{"
+a$ = "  " + q$ + "schemaVersion" + q$ + ": " + q$ + "1.0.0" + q$ + c$
+file_write_text 1, a$
+a$ = "  " + q$ + "exportKind" + q$ + ": " + q$ + "gibbscam-macro-raw" + q$ + c$
+file_write_text 1, a$
+a$ = "  " + q$ + "macroVersion" + q$ + ": " + q$ + "0.1" + q$ + c$
+file_write_text 1, a$
+
+! ------------------------------------------------------------
+! Quelle
+! ------------------------------------------------------------
+get_part_data mdd_name, mdd$
+! get_post_data liefert einen Fehler, wenn noch kein Postprozessor
+! bzw. keine Ausgabedatei im Post-Dialog gesetzt ist. Deshalb in
+! v0.1 nicht abgefragt; der Bridge-Dienst ergaenzt diese Felder
+! aus dem Postprozessorlauf.
+post$ = ""
+ncout$ = ""
+
+a$ = "  " + q$ + "source" + q$ + ": {"
+file_write_text 1, a$
+a$ = "    " + q$ + "machineProfile" + q$ + ": " + q$ + mdd$ + q$ + c$
+file_write_text 1, a$
+a$ = "    " + q$ + "postProcessor" + q$ + ": " + q$ + post$ + q$ + c$
+file_write_text 1, a$
+a$ = "    " + q$ + "ncOutputFile" + q$ + ": " + q$ + ncout$ + q$
+file_write_text 1, a$
+file_write_text 1, "  },"
+
+! ------------------------------------------------------------
+! Programm / Teil
+! ------------------------------------------------------------
+get_part_data comment, pcomment$
+get_part_data alloy, alloy$
+get_part_data hardness, hard$
+get_part_data family, fam$
+get_part_data units, iunits
+units$ = "mm"
+if iunits=1 then units$ = "inch"
+
+a$ = "  " + q$ + "program" + q$ + ": {"
+file_write_text 1, a$
+a$ = "    " + q$ + "programId" + q$ + ": " + q$ + pname$ + q$ + c$
+file_write_text 1, a$
+a$ = "    " + q$ + "name" + q$ + ": " + q$ + pname$ + q$ + c$
+file_write_text 1, a$
+a$ = "    " + q$ + "partFile" + q$ + ": " + q$ + pfile$ + q$ + c$
+file_write_text 1, a$
+a$ = "    " + q$ + "units" + q$ + ": " + q$ + units$ + q$ + c$
+file_write_text 1, a$
+a$ = "    " + q$ + "programmerNotes" + q$ + ": " + q$ + pcomment$ + q$ + c$
+file_write_text 1, a$
+a$ = "    " + q$ + "family" + q$ + ": " + q$ + fam$ + q$ + c$
+file_write_text 1, a$
+
+a$ = "    " + q$ + "material" + q$ + ": {"
+file_write_text 1, a$
+a$ = "      " + q$ + "name" + q$ + ": " + q$ + alloy$ + q$ + c$
+file_write_text 1, a$
+a$ = "      " + q$ + "hardness" + q$ + ": " + q$ + hard$ + q$
+file_write_text 1, a$
+file_write_text 1, "    },"
+
+! Rohteil (Fraesteil: Quader, Drehteil: Zylinder)
+check part_mill, "Dieses Makro v0.1 ist fuer Fraesteile ausgelegt."
+get_part_data stock_x1, sx1
+get_part_data stock_y1, sy1
+get_part_data stock_z1, sz1
+get_part_data stock_x2, sx2
+get_part_data stock_y2, sy2
+get_part_data stock_z2, sz2
+dx = abs(sx2-sx1)
+dy = abs(sy2-sy1)
+dz = abs(sz2-sz1)
+dx$ = trim$(format$(dx, nf$))
+dy$ = trim$(format$(dy, nf$))
+dz$ = trim$(format$(dz, nf$))
+
+a$ = "    " + q$ + "stock" + q$ + ": {"
+file_write_text 1, a$
+a$ = "      " + q$ + "shape" + q$ + ": " + q$ + "block" + q$ + c$
+file_write_text 1, a$
+a$ = "      " + q$ + "dimensions" + q$ + ": [" + dx$ + c$ + " " + dy$ + c$ + " " + dz$ + "]"
+file_write_text 1, a$
+file_write_text 1, "    }"
+file_write_text 1, "  },"
+
+! ------------------------------------------------------------
+! Werkzeuge
+! ------------------------------------------------------------
+a$ = "  " + q$ + "tools" + q$ + ": ["
+file_write_text 1, a$
+
+get_tool_list 0
+ntools = number_of_tools
+for i = 1 to ntools
+    n = next_tool_number
+    get_tool_status n, istat
+    if istat<1 then continue
+
+    get_tool_data n, mtool_type, ttype
+    get_tool_data n, mtool_radius, trad
+    get_tool_data n, mtool_corner_rad, tcr
+    get_tool_data n, mtool_num_flutes, tfl
+    get_tool_data n, mtool_flute_length, tfll
+    get_tool_data n, mtool_length, tlen
+    get_tool_data n, mtool_len_offset, tlo
+    get_tool_data n, offset, toff
+    get_tool_data n, comment, tcom$
+
+    tdia = trad * 2
+    n$ = trim$(format$(n, "####0"))
+    ttype$ = trim$(format$(ttype, "##0"))
+    tdia$ = trim$(format$(tdia, nf$))
+    tcr$ = trim$(format$(tcr, nf$))
+    tfl$ = trim$(format$(tfl, "##0"))
+    tfll$ = trim$(format$(tfll, nf$))
+    tlen$ = trim$(format$(tlen, nf$))
+    tlo$ = trim$(format$(tlo, "####0"))
+    toff$ = trim$(format$(toff, "####0"))
+
+    file_write_text 1, "    {"
+    a$ = "      " + q$ + "toolId" + q$ + ": " + q$ + "T" + n$ + q$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "toolNumber" + q$ + ": " + n$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "name" + q$ + ": " + q$ + tcom$ + q$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "gibbsToolType" + q$ + ": " + ttype$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "diameter" + q$ + ": " + tdia$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "cornerRadius" + q$ + ": " + tcr$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "fluteCount" + q$ + ": " + tfl$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "fluteLength" + q$ + ": " + tfll$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "overallLength" + q$ + ": " + tlen$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "offsets" + q$ + ": {"
+    file_write_text 1, a$
+    a$ = "        " + q$ + "lengthRegister" + q$ + ": " + tlo$ + c$
+    file_write_text 1, a$
+    a$ = "        " + q$ + "radiusRegister" + q$ + ": " + toff$
+    file_write_text 1, a$
+    file_write_text 1, "      }"
+    if i<ntools then file_write_text 1, "    },"
+    if i=ntools then file_write_text 1, "    }"
+next i
+file_write_text 1, "  ],"
+
+! ------------------------------------------------------------
+! Koordinatensysteme (Basis fuer Setups / Nullpunkte)
+! ------------------------------------------------------------
+a$ = "  " + q$ + "coordinateSystems" + q$ + ": ["
+file_write_text 1, a$
+
+get_cs_list
+ncs = number_of_css
+for i = 1 to ncs
+    n = next_cs_number
+    get_cs_name n, csname$
+    get_cs_spindle n, ispin
+    n$ = trim$(format$(n, "####0"))
+    ispin$ = trim$(format$(ispin, "##0"))
+
+    a$ = "    {" + q$ + "csNumber" + q$ + ": " + n$ + c$ + " "
+    a$ = a$ + q$ + "name" + q$ + ": " + q$ + csname$ + q$ + c$ + " "
+    a$ = a$ + q$ + "spindle" + q$ + ": " + ispin$ + "}"
+    if i<ncs then a$ = a$ + c$
+    file_write_text 1, a$
+next i
+file_write_text 1, "  ],"
+
+! ------------------------------------------------------------
+! Operationen (in Reihenfolge der Operationsliste)
+! ------------------------------------------------------------
+a$ = "  " + q$ + "operations" + q$ + ": ["
+file_write_text 1, a$
+
+get_op_list 0
+nops = number_of_ops
+for i = 1 to nops
+    n = next_op_number
+    get_op_status n, istat
+    if istat<1 then continue
+
+    get_op_data n, tool_num, otool
+    get_op_data n, cs_num, ocs
+    get_op_data n, mill_type, omt
+    get_op_data n, rpms, orpm
+    get_op_data n, contour_feed, ofeed
+    get_op_data n, entry_feed, oefeed
+    get_op_data n, z_step, ozs
+    get_op_data n, cut_width, ocw
+    get_op_data n, coolant, ocool
+    get_op_data n, time, otime
+    get_op_data n, op_start, ocom$
+
+    n$ = trim$(format$(n, "####0"))
+    otool$ = trim$(format$(otool, "####0"))
+    ocs$ = trim$(format$(ocs, "####0"))
+    omt$ = trim$(format$(omt, "##0"))
+    orpm$ = trim$(format$(orpm, "######0"))
+    ofeed$ = trim$(format$(ofeed, nf$))
+    oefeed$ = trim$(format$(oefeed, nf$))
+    ozs$ = trim$(format$(ozs, nf$))
+    ocw$ = trim$(format$(ocw, nf$))
+    ocool$ = trim$(format$(ocool, "##0"))
+    otime$ = trim$(format$(otime, nf$))
+
+    file_write_text 1, "    {"
+    a$ = "      " + q$ + "opNo" + q$ + ": " + n$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "name" + q$ + ": " + q$ + ocom$ + q$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "gibbsMillType" + q$ + ": " + omt$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "csNumber" + q$ + ": " + ocs$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "toolId" + q$ + ": " + q$ + "T" + otool$ + q$ + c$
+    file_write_text 1, a$
+    a$ = "      " + q$ + "cuttingData" + q$ + ": {"
+    file_write_text 1, a$
+    a$ = "        " + q$ + "spindleRpm" + q$ + ": " + orpm$ + c$
+    file_write_text 1, a$
+    a$ = "        " + q$ + "feed" + q$ + ": " + ofeed$ + c$
+    file_write_text 1, a$
+    a$ = "        " + q$ + "entryFeed" + q$ + ": " + oefeed$ + c$
+    file_write_text 1, a$
+    a$ = "        " + q$ + "axialDepth" + q$ + ": " + ozs$ + c$
+    file_write_text 1, a$
+    a$ = "        " + q$ + "radialWidth" + q$ + ": " + ocw$ + c$
+    file_write_text 1, a$
+    a$ = "        " + q$ + "gibbsCoolant" + q$ + ": " + ocool$
+    file_write_text 1, a$
+    file_write_text 1, "      },"
+    a$ = "      " + q$ + "estimatedTime" + q$ + ": " + otime$
+    file_write_text 1, a$
+    if i<nops then file_write_text 1, "    },"
+    if i=nops then file_write_text 1, "    }"
+next i
+file_write_text 1, "  ]"
+
+file_write_text 1, "}"
+file_close 1
+if FileError<>0 then goto file_error
+fopen = 0
+
+a$ = "Export fertig:\n" + f$
+a$ = a$ + "\n\nHinweis: Tilde ~ steht fuer das JSON-Anfuehrungszeichen."
+message a$, "Shopfloor Companion Export"
+
+! Optional: Datei direkt im Editor oeffnen
+yesno "Datei jetzt in Notepad oeffnen?", iopen, "Shopfloor Companion Export"
+if iopen=1 then run_exe "C:\Windows\System32\notepad.exe", f$
+stop "Fertig."
+
+! ------------------------------------------------------------
+:file_error
+ierr = FileError
+if fopen=1 then file_close 1
+stop "Dateifehler beim Export, Code " + trim$(format$(ierr, "###0"))

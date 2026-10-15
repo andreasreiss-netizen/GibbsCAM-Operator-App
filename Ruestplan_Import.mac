@@ -1,0 +1,162 @@
+! ============================================================
+! Ruestplan_Import.mac   -   Shopfloor Companion Import  v0.1
+! ------------------------------------------------------------
+! Liest die Begleitdatei <Report>_Op.txt aus der Shopfloor-
+! Companion-App und schreibt die geaenderten Drehzahlen und
+! Vorschuebe in die Operationen des geoeffneten Teils.
+!
+! Zeilenformat der Begleitdatei (leerzeichengetrennt, Dezimalpunkt):
+!   OpNr WerkzeugNr Drehzahl Vorschub ProUmdrehung GeaendertRPM GeaendertFeed
+!   3    1          7650     38.25    0            1            1
+!
+! Sicherheitsregeln:
+!  - Operation muss existieren (sonst uebersprungen)
+!  - Werkzeugnummer der Operation muss zur Datei passen
+!    (sonst uebersprungen, bei PRUEFE_WERKZEUG = 1)
+!  - Nur Werte mit Geaendert-Kennung 1 werden geschrieben
+!  - Vor dem Schreiben wird eine Sicherungskopie des Teils
+!    angelegt (bei SICHERUNG = 1)
+!
+! Hinweise:
+!  - set_op_data schreibt direkt in die Operation. Ob der Post-
+!    prozessor die neuen Werte ohne Neuberechnung uebernimmt,
+!    bitte am ersten Teil pruefen. Falls nicht, Operation in
+!    GibbsCAM markieren und neu berechnen (Redo).
+!  - Einruecken nur mit Leerzeichen, keine Tabs.
+! ============================================================
+
+check part_open, "Bitte zuerst das zugehoerige Teil in GibbsCAM oeffnen."
+
+! ---- Einstellungen ----
+PRUEFE_WERKZEUG = 1
+SICHERUNG = 1
+MAXZEILEN = 500
+! Sperre gegen Ueberschreiben durch Redo:
+!  -1 = keine Sperre setzen (nur den aktuellen Sperrwert protokollieren)
+!  >=0 = diesen Sperrwert (locks) in jede geaenderte Operation schreiben.
+! Den passenden Wert ermitteln: in GibbsCAM bei einer Operation Drehzahl
+! und Vorschub von Hand sperren, dieses Makro mit SPERRWERT = -1 laufen
+! lassen und den protokollierten Wert (locks) hier eintragen.
+SPERRWERT = -1
+
+! ---- Begleitdatei waehlen ----
+file_dialog_new "Shopfloor Companion - Begleitdatei (_Op.txt) waehlen"
+file_dialog_extension "Begleitdatei (*.txt)", "txt"
+file_dialog_extension "Alle Dateien (*.*)", "*"
+f$ = ""
+file_dialog_show open, f$
+if len(f$)<1 then stop "Import abgebrochen - keine Datei gewaehlt."
+
+get_part_data part_name, pname$
+get_part_data part_file, pfile$
+
+a$ = "Teil: " + pname$ + "\nDatei: " + f$ + "\n\nGeaenderte Drehzahlen und Vorschuebe jetzt uebernehmen?"
+yesno a$, iok, "Shopfloor Companion Import"
+if iok=0 then stop "Import abgebrochen."
+
+! ---- Sicherungskopie ----
+if SICHERUNG=0 then goto lesen
+ilen = len(pfile$)
+bak$ = left$(pfile$, ilen-4) + "_vor_Import.vnc"
+save_part_as bak$
+save_part_as pfile$
+
+! ---- Datei lesen und Operationen aendern ----
+:lesen
+fopen = 0
+file_open 1, f$, read
+if FileError<>0 then goto file_error
+fopen = 1
+
+ngesamt = 0
+ngeaendert = 0
+nfehlt = 0
+nwerkzeug = 0
+log$ = ""
+
+for i = 1 to MAXZEILEN
+    iop = -1
+    file_read_vars 1, iop, itool, rpm, feed, perrev, chgrpm, chgfeed
+    if FileError<>0 then goto fertig
+    if iop<1 then goto fertig
+    ngesamt = ngesamt + 1
+    iop$ = trim$(format$(iop, "###0"))
+    itool$ = trim$(format$(itool, "###0"))
+    log$ = log$ + "\nZeile " + trim$(format$(i, "###0")) + ": Op " + iop$ + " T" + itool$
+
+    ! Operation vorhanden?
+    get_op_status iop, istat
+    if istat=1 then goto pruefe
+    nfehlt = nfehlt + 1
+    log$ = log$ + "\nOp " + iop$ + ": nicht vorhanden - uebersprungen"
+    continue
+
+    ! Werkzeug passt?
+:pruefe
+    if PRUEFE_WERKZEUG=0 then goto schreibe
+    get_op_data iop, tool_num, otool
+    if otool=itool then goto schreibe
+    nwerkzeug = nwerkzeug + 1
+    otool$ = trim$(format$(otool, "###0"))
+    itool$ = trim$(format$(itool, "###0"))
+    log$ = log$ + "\nOp " + iop$ + ": Werkzeug T" + otool$ + " statt T" + itool$ + " - uebersprungen"
+    continue
+
+    ! Werte schreiben
+:schreibe
+    zeile$ = "Op " + iop$ + ":"
+    if chgrpm=0 then goto feedwert
+    get_op_data iop, rpms, rpmalt
+    set_op_data iop, rpms, rpm
+    get_op_data iop, rpms, rpmneu
+    rpm$ = trim$(format$(rpm, "######0"))
+    rpmalt$ = trim$(format$(rpmalt, "######0"))
+    rpmneu$ = trim$(format$(rpmneu, "######0"))
+    zeile$ = zeile$ + " n: " + rpmalt$ + " -> " + rpm$ + " (gelesen " + rpmneu$ + ")"
+
+:feedwert
+    if chgfeed=0 then goto zeilefertig
+    get_op_data iop, contour_feed, feedalt
+    set_op_data iop, contour_feed, feed
+    get_op_data iop, contour_feed, feedneu
+    feed$ = trim$(format$(feed, "#####0.0###"))
+    feedalt$ = trim$(format$(feedalt, "#####0.0###"))
+    feedneu$ = trim$(format$(feedneu, "#####0.0###"))
+    zeile$ = zeile$ + " f: " + feedalt$ + " -> " + feed$ + " (gelesen " + feedneu$ + ")"
+
+:zeilefertig
+    get_op_data iop, locks, lockalt
+    if SPERRWERT>=0 then set_op_data iop, locks, SPERRWERT
+    get_op_data iop, locks, lockneu
+    lockalt$ = trim$(format$(lockalt, "#########0"))
+    lockneu$ = trim$(format$(lockneu, "#########0"))
+    zeile$ = zeile$ + " locks: " + lockalt$ + " -> " + lockneu$
+    ngeaendert = ngeaendert + 1
+    log$ = log$ + "\n" + zeile$
+next i
+
+:fertig
+file_close 1
+fopen = 0
+redraw
+
+ngesamt$ = trim$(format$(ngesamt, "###0"))
+ngeaendert$ = trim$(format$(ngeaendert, "###0"))
+nfehlt$ = trim$(format$(nfehlt, "###0"))
+nwerkzeug$ = trim$(format$(nwerkzeug, "###0"))
+
+a$ = "Zeilen gelesen: " + ngesamt$
+a$ = a$ + "\nOperationen geaendert: " + ngeaendert$
+a$ = a$ + "\nNicht vorhanden: " + nfehlt$
+a$ = a$ + "\nWerkzeug passt nicht: " + nwerkzeug$
+a$ = a$ + "\n" + log$
+if SICHERUNG=1 then a$ = a$ + "\n\nSicherung: " + bak$
+a$ = a$ + "\n\nBitte Operationen pruefen und bei Bedarf neu berechnen, dann speichern."
+message a$, "Shopfloor Companion Import - Ergebnis"
+stop "Fertig."
+
+! ------------------------------------------------------------
+:file_error
+ierr = FileError
+if fopen=1 then file_close 1
+stop "Dateifehler beim Lesen, Code " + trim$(format$(ierr, "###0"))
