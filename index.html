@@ -696,22 +696,13 @@ async function saveAll(){
     try{ await navigator.clipboard.writeText(txt); toast("Speichern hier nicht möglich – Begleitdatei in die Zwischenablage kopiert"); }catch(e){ toast("Speichern in dieser Ansicht nicht möglich"); }
     return;
   }
+  // Nur die Begleitdatei speichern: eine Datei, direkt vom Import-Makro lesbar.
+  // (Die Report-Kopie als .xlsx bleibt als Funktion buildXlsxCopy erhalten.)
   let saved=0;
-  if(reportBuf){
-    // Beide Dateien in einem Paket, damit nur eine Bestätigung nötig ist
-    try{
-      const pack = new JSZip();
-      pack.file(base+".txt", txt);
-      pack.file(base+".xlsx", await buildXlsxCopy(rows));
-      const bytes = await pack.generateAsync({type:"uint8array", compression:"DEFLATE"});
-      await downloads.save({filename: base+".zip", data: bytes}); saved=2;
-    }catch(e){ if(e && e.code==="declined"){ toast("Speichern abgebrochen"); return; } toast("Paket konnte nicht erstellt werden: "+(e.message||"")); return; }
-  } else {
-    try{ await downloads.save({filename: base+".txt", data: txt}); saved=1; }
-    catch(e){ if(e && e.code==="declined"){ toast("Speichern abgebrochen"); return; } toast("Begleitdatei konnte nicht gespeichert werden"); return; }
-  }
+  try{ await downloads.save({filename: base+".txt", data: txt}); saved=1; }
+  catch(e){ if(e && e.code==="declined"){ toast("Speichern abgebrochen"); return; } toast("Begleitdatei konnte nicht gespeichert werden"); return; }
   const what = lockMode==="all" ? nChanged+" geändert, alle "+rows.length+" Operationen gesperrt" : rows.length+" Operationen geändert und gesperrt";
-  toast(saved===2 ? what+" – "+base+".zip (.xlsx + .txt)" : what+" – "+base+".txt");
+  toast(what+" – "+base+".txt");
 }
 $("#btnSave").onclick = saveAll;
 
