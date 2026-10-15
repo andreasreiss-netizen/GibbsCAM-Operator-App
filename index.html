@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -57,6 +57,7 @@ header .spacer{flex:1}
 .lockmode button{border:none;background:transparent;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:500;color:var(--ink-2)}
 .lockmode button[aria-checked="true"]{background:var(--accent);color:var(--accent-ink)}
 .lockmode[aria-disabled="true"]{opacity:.45;pointer-events:none}
+.langsel{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--radius-s);padding:7px 10px}
 .btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:var(--radius-s);padding:8px 14px;font-weight:500;font-size:14px}
 .btn:hover{background:var(--surface-2)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -167,13 +168,14 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <h1>Shopfloor Companion</h1>
   <span class="prog" id="progLabel"></span>
   <span class="spacer"></span>
-  <button class="btn" id="btnXlsx">Report laden</button>
-  <div class="lockmode" role="radiogroup" aria-label="Beim Speichern sperren" id="lockMode">
-    <span class="lbl">Sperren</span>
-    <button type="button" role="radio" data-v="changed" aria-checked="true">nur geänderte</button>
-    <button type="button" role="radio" data-v="all" aria-checked="false">alle Werte</button>
+  <select id="langSel" class="langsel" aria-label="Language"></select>
+  <button class="btn" id="btnXlsx" data-t="load_report">Load report</button>
+  <div class="lockmode" role="radiogroup" id="lockMode">
+    <span class="lbl" data-t="lock">Lock</span>
+    <button type="button" role="radio" data-v="changed" aria-checked="true" data-t="lock_changed">changed only</button>
+    <button type="button" role="radio" data-v="all" aria-checked="false" data-t="lock_all">all values</button>
   </div>
-  <button class="btn primary" id="btnSave" disabled>Speichern</button>
+  <button class="btn primary" id="btnSave" disabled data-t="save">Save</button>
   <input type="file" id="fileJson" accept=".json,application/json">
   <input type="file" id="fileImg" accept="image/*">
   <input type="file" id="fileImgs" accept="image/*" multiple>
@@ -188,6 +190,63 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 <script>
 (function(){
 "use strict";
+// ---------- Sprachen (GibbsCAM-Oberflächensprachen, Standard Englisch) ----------
+const LANGS = [["en","English"],["de","Deutsch"],["fr","Français"],["it","Italiano"],["es","Español"],["pt","Português"],["nl","Nederlands"],["sv","Svenska"],["cs","Čeština"],["pl","Polski"],["ru","Русский"],["tr","Türkçe"],["ja","日本語"],["zh","简体中文"],["ko","한국어"]];
+const LOCALES = {en:"en-US",de:"de-DE",fr:"fr-FR",it:"it-IT",es:"es-ES",pt:"pt-BR",nl:"nl-NL",sv:"sv-SE",cs:"cs-CZ",pl:"pl-PL",ru:"ru-RU",tr:"tr-TR",ja:"ja-JP",zh:"zh-CN",ko:"ko-KR"};
+const I18N = {
+en:{load_report:"Load report",lock:"Lock",lock_changed:"changed only",lock_all:"all values",save:"Save",ops_header:"{n} operations in NC order",empty_title:"Load setup sheet",empty_text:"Load the Excel report from the GibbsCAM Reporter. You can also drop the file here.",img_title:"Assign image",img_alt:"Image for operation {n}",img_add:"Add operation image<br>(click or drop)",img_change:"Change image",img_addshort:"Add image",before:"Before",after:"After",op_of:"Operation {i} of {n}",cs:"Coordinate system {n}",tool_missing:"Tool not in list",coolant:"Coolant",time:"Time",length:"Length",radius:"Radius",note:"Note",feed:"Feed",rpm:"Spindle speed",entry_feed:"Entry feed",programmed:"Programmed",no_value:"No value in report",reset:"Reset",equals:"equals {v} {u}/min",changes:"Changes",no_changes:"No operation changed yet. Move a slider to adjust feed or speed; changes stay saved on this device.",changed_one:"1 operation changed",changed_many:"{n} operations changed",col_op:"Op",col_name:"Name",changed_marker:"changed",toast_img_err:"Image for operation {n} cannot be shown on this device",toast_imgs:"{n} images assigned",toast_not_recognized:"not recognized",toast_no_ops:"No operations found in the report",toast_loaded:"{n} operations loaded from report",toast_with_images:", {n} with image",toast_no_images:", no images found",toast_no_changes:"No changes – nothing to save",toast_cancel:"Saving cancelled",toast_fail:"Companion file could not be saved",toast_saved_changed:"{n} operations changed and locked",toast_saved_all:"{c} changed, all {n} operations locked",toast_unavail:"Saving not possible in this view",toast_clip:"Saving not possible here – companion file copied to clipboard",operation:"Operation",with_tool:"with T{n}",tool:"Tool",runtime:"Run time",aria_pct:"{l} in percent of programmed value",
+ opCodes:{Rough:"Roughing",Finish:"Finishing",Drill:"Drilling",Tap:"Tapping",Ream:"Reaming",Bore:"Boring",Contour:"Contouring",Face:"Facing",Pocket:"Pocketing",Thread:"Threading",Probe:"Probing"},
+ toolCodes:{REM:"Rough end mill",FEM:"Finish end mill",EM:"End mill",BEM:"Ball end mill",BUL:"Bull nose end mill",FM:"Face mill",DR:"Drill",DRL:"Drill",CD:"Center drill",SD:"Spot drill",TAP:"Tap",RM:"Reamer",BOR:"Boring bar",CS:"Countersink",CB:"Counterbore",TM:"Thread mill",CH:"Chamfer mill",KEY:"Keyseat cutter",LOL:"Lollipop cutter",PRB:"Probe"}},
+de:{load_report:"Report laden",lock:"Sperren",lock_changed:"nur geänderte",lock_all:"alle Werte",save:"Speichern",ops_header:"{n} Operationen in NC-Reihenfolge",empty_title:"Rüstplan laden",empty_text:"Lade den Excel-Report aus dem GibbsCAM-Reporter. Du kannst die Datei auch direkt hierher ziehen.",img_title:"Bild zuordnen",img_alt:"Bild zu Operation {n}",img_add:"Bild der Operation hinzufügen<br>(Klick oder Ablegen)",img_change:"Bild ändern",img_addshort:"Bild hinzufügen",before:"Vorher",after:"Nachher",op_of:"Operation {i} von {n}",cs:"Koordinatensystem {n}",tool_missing:"Werkzeug nicht in Liste",coolant:"Kühlung",time:"Zeit",length:"Länge",radius:"Radius",note:"Hinweis",feed:"Vorschub",rpm:"Drehzahl",entry_feed:"Eintauchvorschub (Entry Feed)",programmed:"Programmiert",no_value:"Kein Wert im Report",reset:"Zurücksetzen",equals:"entspricht {v} {u}/min",changes:"Änderungen",no_changes:"Noch keine Operation geändert. Schieber verschieben, um Vorschub oder Drehzahl anzupassen; Änderungen bleiben auf diesem Gerät gespeichert.",changed_one:"1 Operation geändert",changed_many:"{n} Operationen geändert",col_op:"Op",col_name:"Name",changed_marker:"geändert",toast_img_err:"Bild zu Operation {n} kann auf diesem Gerät nicht angezeigt werden",toast_imgs:"{n} Bilder zugeordnet",toast_not_recognized:"nicht erkannt",toast_no_ops:"Im Report wurden keine Operationen gefunden",toast_loaded:"{n} Operationen aus dem Report geladen",toast_with_images:", {n} mit Bild",toast_no_images:", keine Bilder gefunden",toast_no_changes:"Keine Änderungen – nichts zu speichern",toast_cancel:"Speichern abgebrochen",toast_fail:"Begleitdatei konnte nicht gespeichert werden",toast_saved_changed:"{n} Operationen geändert und gesperrt",toast_saved_all:"{c} geändert, alle {n} Operationen gesperrt",toast_unavail:"Speichern in dieser Ansicht nicht möglich",toast_clip:"Speichern hier nicht möglich – Begleitdatei in die Zwischenablage kopiert",operation:"Operation",with_tool:"mit T{n}",tool:"Werkzeug",runtime:"Laufzeit",aria_pct:"{l} in Prozent des programmierten Werts",
+ opCodes:{Rough:"Schruppen",Finish:"Schlichten",Drill:"Bohren",Tap:"Gewindebohren",Ream:"Reiben",Bore:"Ausspindeln",Contour:"Konturfräsen",Face:"Planen",Pocket:"Taschenfräsen",Thread:"Gewinde",Probe:"Messen"},
+ toolCodes:{REM:"Schruppfräser",FEM:"Schlichtfräser",EM:"Schaftfräser",BEM:"Kugelfräser",BUL:"Torusfräser",FM:"Planfräser",DR:"Bohrer",DRL:"Bohrer",CD:"Zentrierbohrer",SD:"Anbohrer",TAP:"Gewindebohrer",RM:"Reibahle",BOR:"Bohrstange",CS:"Senker",CB:"Zapfensenker",TM:"Gewindefräser",CH:"Fasenfräser",KEY:"Scheibenfräser",LOL:"Lollipop-Fräser",PRB:"Messtaster"}},
+fr:{load_report:"Charger le rapport",lock:"Verrouiller",lock_changed:"modifiés seulement",lock_all:"toutes les valeurs",save:"Enregistrer",ops_header:"{n} opérations dans l'ordre CN",empty_title:"Charger la fiche de réglage",empty_text:"Chargez le rapport Excel du Reporter GibbsCAM. Vous pouvez aussi déposer le fichier ici.",img_title:"Associer une image",img_alt:"Image de l'opération {n}",img_add:"Ajouter l'image de l'opération<br>(clic ou dépôt)",img_change:"Changer l'image",img_addshort:"Ajouter une image",before:"Avant",after:"Après",op_of:"Opération {i} sur {n}",cs:"Système de coordonnées {n}",tool_missing:"Outil absent de la liste",coolant:"Arrosage",time:"Temps",length:"Longueur",radius:"Rayon",note:"Remarque",feed:"Avance",rpm:"Vitesse de broche",entry_feed:"Avance d'entrée",programmed:"Programmé",no_value:"Aucune valeur dans le rapport",reset:"Réinitialiser",equals:"soit {v} {u}/min",changes:"Modifications",no_changes:"Aucune opération modifiée. Déplacez un curseur pour ajuster l'avance ou la vitesse ; les modifications restent enregistrées sur cet appareil.",changed_one:"1 opération modifiée",changed_many:"{n} opérations modifiées",col_op:"Op",col_name:"Nom",changed_marker:"modifié",toast_img_err:"L'image de l'opération {n} ne peut pas être affichée sur cet appareil",toast_imgs:"{n} images associées",toast_not_recognized:"non reconnu",toast_no_ops:"Aucune opération trouvée dans le rapport",toast_loaded:"{n} opérations chargées depuis le rapport",toast_with_images:", {n} avec image",toast_no_images:", aucune image trouvée",toast_no_changes:"Aucune modification – rien à enregistrer",toast_cancel:"Enregistrement annulé",toast_fail:"Impossible d'enregistrer le fichier compagnon",toast_saved_changed:"{n} opérations modifiées et verrouillées",toast_saved_all:"{c} modifiées, les {n} opérations verrouillées",toast_unavail:"Enregistrement impossible dans cette vue",toast_clip:"Enregistrement impossible ici – fichier compagnon copié dans le presse-papiers",operation:"Opération",with_tool:"avec T{n}",tool:"Outil",runtime:"Temps d'usinage",aria_pct:"{l} en pourcentage de la valeur programmée",
+ opCodes:{Rough:"Ébauche",Finish:"Finition",Drill:"Perçage",Tap:"Taraudage",Ream:"Alésage",Bore:"Alésage à la barre",Contour:"Contournage",Face:"Surfaçage",Pocket:"Poche",Thread:"Filetage",Probe:"Palpage"},
+ toolCodes:{REM:"Fraise d'ébauche",FEM:"Fraise de finition",EM:"Fraise 2 tailles",BEM:"Fraise hémisphérique",BUL:"Fraise torique",FM:"Fraise à surfacer",DR:"Foret",DRL:"Foret",CD:"Foret à centrer",SD:"Foret à pointer",TAP:"Taraud",RM:"Alésoir",BOR:"Barre d'alésage",CS:"Fraise à chanfreiner",CB:"Fraise à lamer",TM:"Fraise à fileter",CH:"Fraise à chanfreiner",KEY:"Fraise à rainurer",LOL:"Fraise boule",PRB:"Palpeur"}},
+it:{load_report:"Carica report",lock:"Blocca",lock_changed:"solo modificati",lock_all:"tutti i valori",save:"Salva",ops_header:"{n} operazioni in ordine CN",empty_title:"Carica scheda di attrezzaggio",empty_text:"Carica il report Excel del Reporter GibbsCAM. Puoi anche trascinare il file qui.",img_title:"Assegna immagine",img_alt:"Immagine dell'operazione {n}",img_add:"Aggiungi immagine dell'operazione<br>(clic o trascina)",img_change:"Cambia immagine",img_addshort:"Aggiungi immagine",before:"Prima",after:"Dopo",op_of:"Operazione {i} di {n}",cs:"Sistema di coordinate {n}",tool_missing:"Utensile non in elenco",coolant:"Refrigerante",time:"Tempo",length:"Lunghezza",radius:"Raggio",note:"Nota",feed:"Avanzamento",rpm:"Velocità mandrino",entry_feed:"Avanzamento di entrata",programmed:"Programmato",no_value:"Nessun valore nel report",reset:"Ripristina",equals:"pari a {v} {u}/min",changes:"Modifiche",no_changes:"Nessuna operazione modificata. Sposta un cursore per regolare avanzamento o velocità; le modifiche restano salvate su questo dispositivo.",changed_one:"1 operazione modificata",changed_many:"{n} operazioni modificate",col_op:"Op",col_name:"Nome",changed_marker:"modificato",toast_img_err:"L'immagine dell'operazione {n} non può essere mostrata su questo dispositivo",toast_imgs:"{n} immagini assegnate",toast_not_recognized:"non riconosciuto",toast_no_ops:"Nessuna operazione trovata nel report",toast_loaded:"{n} operazioni caricate dal report",toast_with_images:", {n} con immagine",toast_no_images:", nessuna immagine trovata",toast_no_changes:"Nessuna modifica – niente da salvare",toast_cancel:"Salvataggio annullato",toast_fail:"Impossibile salvare il file di accompagnamento",toast_saved_changed:"{n} operazioni modificate e bloccate",toast_saved_all:"{c} modificate, tutte le {n} operazioni bloccate",toast_unavail:"Salvataggio non possibile in questa vista",toast_clip:"Salvataggio non possibile qui – file copiato negli appunti",operation:"Operazione",with_tool:"con T{n}",tool:"Utensile",runtime:"Tempo ciclo",aria_pct:"{l} in percentuale del valore programmato",
+ opCodes:{Rough:"Sgrossatura",Finish:"Finitura",Drill:"Foratura",Tap:"Maschiatura",Ream:"Alesatura",Bore:"Barenatura",Contour:"Contornatura",Face:"Spianatura",Pocket:"Tasca",Thread:"Filettatura",Probe:"Tastatura"},
+ toolCodes:{REM:"Fresa di sgrossatura",FEM:"Fresa di finitura",EM:"Fresa cilindrica",BEM:"Fresa sferica",BUL:"Fresa torica",FM:"Fresa a spianare",DR:"Punta",DRL:"Punta",CD:"Punta da centri",SD:"Punta a centrare",TAP:"Maschio",RM:"Alesatore",BOR:"Bareno",CS:"Svasatore",CB:"Lamatore",TM:"Fresa a filettare",CH:"Fresa per smussi",KEY:"Fresa a disco",LOL:"Fresa lollipop",PRB:"Tastatore"}},
+es:{load_report:"Cargar informe",lock:"Bloquear",lock_changed:"solo modificados",lock_all:"todos los valores",save:"Guardar",ops_header:"{n} operaciones en orden CN",empty_title:"Cargar hoja de preparación",empty_text:"Cargue el informe Excel del Reporter de GibbsCAM. También puede arrastrar el archivo aquí.",img_title:"Asignar imagen",img_alt:"Imagen de la operación {n}",img_add:"Añadir imagen de la operación<br>(clic o arrastrar)",img_change:"Cambiar imagen",img_addshort:"Añadir imagen",before:"Antes",after:"Después",op_of:"Operación {i} de {n}",cs:"Sistema de coordenadas {n}",tool_missing:"Herramienta no está en la lista",coolant:"Refrigerante",time:"Tiempo",length:"Longitud",radius:"Radio",note:"Nota",feed:"Avance",rpm:"Velocidad del husillo",entry_feed:"Avance de entrada",programmed:"Programado",no_value:"Sin valor en el informe",reset:"Restablecer",equals:"equivale a {v} {u}/min",changes:"Cambios",no_changes:"Ninguna operación modificada. Mueva un control para ajustar avance o velocidad; los cambios se guardan en este dispositivo.",changed_one:"1 operación modificada",changed_many:"{n} operaciones modificadas",col_op:"Op",col_name:"Nombre",changed_marker:"modificado",toast_img_err:"La imagen de la operación {n} no se puede mostrar en este dispositivo",toast_imgs:"{n} imágenes asignadas",toast_not_recognized:"no reconocido",toast_no_ops:"No se encontraron operaciones en el informe",toast_loaded:"{n} operaciones cargadas del informe",toast_with_images:", {n} con imagen",toast_no_images:", no se encontraron imágenes",toast_no_changes:"Sin cambios – nada que guardar",toast_cancel:"Guardado cancelado",toast_fail:"No se pudo guardar el archivo complementario",toast_saved_changed:"{n} operaciones modificadas y bloqueadas",toast_saved_all:"{c} modificadas, las {n} operaciones bloqueadas",toast_unavail:"No es posible guardar en esta vista",toast_clip:"No es posible guardar aquí – archivo copiado al portapapeles",operation:"Operación",with_tool:"con T{n}",tool:"Herramienta",runtime:"Tiempo de ciclo",aria_pct:"{l} en porcentaje del valor programado",
+ opCodes:{Rough:"Desbaste",Finish:"Acabado",Drill:"Taladrado",Tap:"Roscado",Ream:"Escariado",Bore:"Mandrinado",Contour:"Contorneado",Face:"Planeado",Pocket:"Cajeado",Thread:"Rosca",Probe:"Palpado"},
+ toolCodes:{REM:"Fresa de desbaste",FEM:"Fresa de acabado",EM:"Fresa frontal",BEM:"Fresa esférica",BUL:"Fresa tórica",FM:"Fresa de planear",DR:"Broca",DRL:"Broca",CD:"Broca de centrar",SD:"Broca de puntear",TAP:"Macho",RM:"Escariador",BOR:"Barra de mandrinar",CS:"Avellanador",CB:"Abocardador",TM:"Fresa de roscar",CH:"Fresa de chaflanar",KEY:"Fresa de chavetero",LOL:"Fresa lollipop",PRB:"Palpador"}},
+pt:{load_report:"Carregar relatório",lock:"Bloquear",lock_changed:"só alterados",lock_all:"todos os valores",save:"Salvar",ops_header:"{n} operações na ordem do CN",empty_title:"Carregar folha de setup",empty_text:"Carregue o relatório Excel do Reporter do GibbsCAM. Você também pode arrastar o arquivo para cá.",img_title:"Atribuir imagem",img_alt:"Imagem da operação {n}",img_add:"Adicionar imagem da operação<br>(clique ou arraste)",img_change:"Trocar imagem",img_addshort:"Adicionar imagem",before:"Antes",after:"Depois",op_of:"Operação {i} de {n}",cs:"Sistema de coordenadas {n}",tool_missing:"Ferramenta não está na lista",coolant:"Refrigeração",time:"Tempo",length:"Comprimento",radius:"Raio",note:"Observação",feed:"Avanço",rpm:"Rotação",entry_feed:"Avanço de entrada",programmed:"Programado",no_value:"Sem valor no relatório",reset:"Redefinir",equals:"equivale a {v} {u}/min",changes:"Alterações",no_changes:"Nenhuma operação alterada. Mova um controle para ajustar avanço ou rotação; as alterações ficam salvas neste dispositivo.",changed_one:"1 operação alterada",changed_many:"{n} operações alteradas",col_op:"Op",col_name:"Nome",changed_marker:"alterado",toast_img_err:"A imagem da operação {n} não pode ser exibida neste dispositivo",toast_imgs:"{n} imagens atribuídas",toast_not_recognized:"não reconhecido",toast_no_ops:"Nenhuma operação encontrada no relatório",toast_loaded:"{n} operações carregadas do relatório",toast_with_images:", {n} com imagem",toast_no_images:", nenhuma imagem encontrada",toast_no_changes:"Sem alterações – nada para salvar",toast_cancel:"Salvamento cancelado",toast_fail:"Não foi possível salvar o arquivo complementar",toast_saved_changed:"{n} operações alteradas e bloqueadas",toast_saved_all:"{c} alteradas, todas as {n} operações bloqueadas",toast_unavail:"Não é possível salvar nesta visualização",toast_clip:"Não é possível salvar aqui – arquivo copiado para a área de transferência",operation:"Operação",with_tool:"com T{n}",tool:"Ferramenta",runtime:"Tempo de ciclo",aria_pct:"{l} em porcentagem do valor programado",
+ opCodes:{Rough:"Desbaste",Finish:"Acabamento",Drill:"Furação",Tap:"Rosqueamento",Ream:"Alargamento",Bore:"Mandrilamento",Contour:"Contorno",Face:"Faceamento",Pocket:"Cavidade",Thread:"Rosca",Probe:"Apalpação"},
+ toolCodes:{REM:"Fresa de desbaste",FEM:"Fresa de acabamento",EM:"Fresa de topo",BEM:"Fresa esférica",BUL:"Fresa toroidal",FM:"Fresa de facear",DR:"Broca",DRL:"Broca",CD:"Broca de centro",SD:"Broca de ponto",TAP:"Macho",RM:"Alargador",BOR:"Barra de mandrilar",CS:"Escareador",CB:"Rebaixador",TM:"Fresa de rosca",CH:"Fresa de chanfro",KEY:"Fresa de rasgo",LOL:"Fresa lollipop",PRB:"Apalpador"}},
+nl:{load_report:"Rapport laden",lock:"Vergrendelen",lock_changed:"alleen gewijzigde",lock_all:"alle waarden",save:"Opslaan",ops_header:"{n} bewerkingen in NC-volgorde",empty_title:"Opspanplan laden",empty_text:"Laad het Excel-rapport uit de GibbsCAM Reporter. Je kunt het bestand ook hierheen slepen.",img_title:"Afbeelding toewijzen",img_alt:"Afbeelding van bewerking {n}",img_add:"Afbeelding van bewerking toevoegen<br>(klik of sleep)",img_change:"Afbeelding wijzigen",img_addshort:"Afbeelding toevoegen",before:"Voor",after:"Na",op_of:"Bewerking {i} van {n}",cs:"Coördinatenstelsel {n}",tool_missing:"Gereedschap niet in lijst",coolant:"Koeling",time:"Tijd",length:"Lengte",radius:"Radius",note:"Opmerking",feed:"Voeding",rpm:"Toerental",entry_feed:"Insteekvoeding",programmed:"Geprogrammeerd",no_value:"Geen waarde in rapport",reset:"Herstellen",equals:"komt overeen met {v} {u}/min",changes:"Wijzigingen",no_changes:"Nog geen bewerking gewijzigd. Verschuif een regelaar om voeding of toerental aan te passen; wijzigingen blijven op dit apparaat bewaard.",changed_one:"1 bewerking gewijzigd",changed_many:"{n} bewerkingen gewijzigd",col_op:"Op",col_name:"Naam",changed_marker:"gewijzigd",toast_img_err:"Afbeelding van bewerking {n} kan op dit apparaat niet worden getoond",toast_imgs:"{n} afbeeldingen toegewezen",toast_not_recognized:"niet herkend",toast_no_ops:"Geen bewerkingen gevonden in het rapport",toast_loaded:"{n} bewerkingen geladen uit rapport",toast_with_images:", {n} met afbeelding",toast_no_images:", geen afbeeldingen gevonden",toast_no_changes:"Geen wijzigingen – niets op te slaan",toast_cancel:"Opslaan geannuleerd",toast_fail:"Begeleidend bestand kon niet worden opgeslagen",toast_saved_changed:"{n} bewerkingen gewijzigd en vergrendeld",toast_saved_all:"{c} gewijzigd, alle {n} bewerkingen vergrendeld",toast_unavail:"Opslaan niet mogelijk in deze weergave",toast_clip:"Opslaan hier niet mogelijk – bestand naar klembord gekopieerd",operation:"Bewerking",with_tool:"met T{n}",tool:"Gereedschap",runtime:"Looptijd",aria_pct:"{l} in procent van de geprogrammeerde waarde",
+ opCodes:{Rough:"Voorbewerken",Finish:"Nabewerken",Drill:"Boren",Tap:"Tappen",Ream:"Ruimen",Bore:"Kotteren",Contour:"Contourfrezen",Face:"Vlakfrezen",Pocket:"Kamerfrezen",Thread:"Schroefdraad",Probe:"Meten"},
+ toolCodes:{REM:"Voorfrees",FEM:"Nafrees",EM:"Vingerfrees",BEM:"Kogelfrees",BUL:"Torusfrees",FM:"Vlakfrees",DR:"Boor",DRL:"Boor",CD:"Centerboor",SD:"Aanboor",TAP:"Tap",RM:"Ruimer",BOR:"Kotterbaar",CS:"Verzinkboor",CB:"Kopverzinker",TM:"Draadfrees",CH:"Afkantfrees",KEY:"Spiebaanfrees",LOL:"Lollipopfrees",PRB:"Taster"}},
+sv:{load_report:"Ladda rapport",lock:"Lås",lock_changed:"endast ändrade",lock_all:"alla värden",save:"Spara",ops_header:"{n} operationer i NC-ordning",empty_title:"Ladda riggningsblad",empty_text:"Ladda Excel-rapporten från GibbsCAM Reporter. Du kan också släppa filen här.",img_title:"Tilldela bild",img_alt:"Bild för operation {n}",img_add:"Lägg till bild för operationen<br>(klicka eller släpp)",img_change:"Byt bild",img_addshort:"Lägg till bild",before:"Före",after:"Efter",op_of:"Operation {i} av {n}",cs:"Koordinatsystem {n}",tool_missing:"Verktyg saknas i listan",coolant:"Kylning",time:"Tid",length:"Längd",radius:"Radie",note:"Anmärkning",feed:"Matning",rpm:"Varvtal",entry_feed:"Ingångsmatning",programmed:"Programmerat",no_value:"Inget värde i rapporten",reset:"Återställ",equals:"motsvarar {v} {u}/min",changes:"Ändringar",no_changes:"Ingen operation ändrad ännu. Flytta ett reglage för att justera matning eller varvtal; ändringarna sparas på den här enheten.",changed_one:"1 operation ändrad",changed_many:"{n} operationer ändrade",col_op:"Op",col_name:"Namn",changed_marker:"ändrad",toast_img_err:"Bilden för operation {n} kan inte visas på den här enheten",toast_imgs:"{n} bilder tilldelade",toast_not_recognized:"ej igenkänd",toast_no_ops:"Inga operationer hittades i rapporten",toast_loaded:"{n} operationer laddade från rapporten",toast_with_images:", {n} med bild",toast_no_images:", inga bilder hittades",toast_no_changes:"Inga ändringar – inget att spara",toast_cancel:"Sparandet avbröts",toast_fail:"Följefilen kunde inte sparas",toast_saved_changed:"{n} operationer ändrade och låsta",toast_saved_all:"{c} ändrade, alla {n} operationer låsta",toast_unavail:"Det går inte att spara i den här vyn",toast_clip:"Det går inte att spara här – följefilen kopierad till urklipp",operation:"Operation",with_tool:"med T{n}",tool:"Verktyg",runtime:"Körtid",aria_pct:"{l} i procent av programmerat värde",
+ opCodes:{Rough:"Grovbearbetning",Finish:"Finbearbetning",Drill:"Borrning",Tap:"Gängning",Ream:"Brotschning",Bore:"Uppborrning",Contour:"Konturfräsning",Face:"Planfräsning",Pocket:"Fickfräsning",Thread:"Gänga",Probe:"Mätning"},
+ toolCodes:{REM:"Grovfräs",FEM:"Finfräs",EM:"Pinnfräs",BEM:"Kulfräs",BUL:"Torusfräs",FM:"Planfräs",DR:"Borr",DRL:"Borr",CD:"Centrumborr",SD:"Ansättningsborr",TAP:"Gängtapp",RM:"Brotsch",BOR:"Borrstång",CS:"Försänkare",CB:"Planförsänkare",TM:"Gängfräs",CH:"Fasfräs",KEY:"Kilspårsfräs",LOL:"Lollipopfräs",PRB:"Mätprob"}},
+cs:{load_report:"Načíst report",lock:"Zamknout",lock_changed:"jen změněné",lock_all:"všechny hodnoty",save:"Uložit",ops_header:"{n} operací v pořadí NC",empty_title:"Načíst seřizovací list",empty_text:"Načtěte Excel report z GibbsCAM Reporteru. Soubor sem můžete také přetáhnout.",img_title:"Přiřadit obrázek",img_alt:"Obrázek operace {n}",img_add:"Přidat obrázek operace<br>(klikněte nebo přetáhněte)",img_change:"Změnit obrázek",img_addshort:"Přidat obrázek",before:"Před",after:"Po",op_of:"Operace {i} z {n}",cs:"Souřadný systém {n}",tool_missing:"Nástroj není v seznamu",coolant:"Chlazení",time:"Čas",length:"Délka",radius:"Rádius",note:"Poznámka",feed:"Posuv",rpm:"Otáčky",entry_feed:"Posuv zápichu",programmed:"Programováno",no_value:"V reportu není hodnota",reset:"Obnovit",equals:"odpovídá {v} {u}/min",changes:"Změny",no_changes:"Zatím žádná operace nebyla změněna. Posuňte jezdec pro úpravu posuvu nebo otáček; změny zůstávají uložené v tomto zařízení.",changed_one:"1 operace změněna",changed_many:"{n} operací změněno",col_op:"Op",col_name:"Název",changed_marker:"změněno",toast_img_err:"Obrázek operace {n} nelze na tomto zařízení zobrazit",toast_imgs:"{n} obrázků přiřazeno",toast_not_recognized:"nerozpoznáno",toast_no_ops:"V reportu nebyly nalezeny žádné operace",toast_loaded:"{n} operací načteno z reportu",toast_with_images:", {n} s obrázkem",toast_no_images:", žádné obrázky nenalezeny",toast_no_changes:"Žádné změny – není co uložit",toast_cancel:"Ukládání zrušeno",toast_fail:"Doprovodný soubor se nepodařilo uložit",toast_saved_changed:"{n} operací změněno a zamknuto",toast_saved_all:"{c} změněno, všech {n} operací zamknuto",toast_unavail:"V tomto zobrazení nelze ukládat",toast_clip:"Zde nelze uložit – soubor zkopírován do schránky",operation:"Operace",with_tool:"s T{n}",tool:"Nástroj",runtime:"Doba cyklu",aria_pct:"{l} v procentech programované hodnoty",
+ opCodes:{Rough:"Hrubování",Finish:"Dokončování",Drill:"Vrtání",Tap:"Závitování",Ream:"Vystružování",Bore:"Vyvrtávání",Contour:"Kontura",Face:"Čelní frézování",Pocket:"Kapsa",Thread:"Závit",Probe:"Měření"},
+ toolCodes:{REM:"Hrubovací fréza",FEM:"Dokončovací fréza",EM:"Stopková fréza",BEM:"Kulová fréza",BUL:"Toroidní fréza",FM:"Čelní fréza",DR:"Vrták",DRL:"Vrták",CD:"Středicí vrták",SD:"Navrtávák",TAP:"Závitník",RM:"Výstružník",BOR:"Vyvrtávací tyč",CS:"Záhlubník kuželový",CB:"Záhlubník válcový",TM:"Závitová fréza",CH:"Srážecí fréza",KEY:"Drážkovací fréza",LOL:"Fréza lollipop",PRB:"Sonda"}},
+pl:{load_report:"Wczytaj raport",lock:"Blokuj",lock_changed:"tylko zmienione",lock_all:"wszystkie wartości",save:"Zapisz",ops_header:"{n} operacji w kolejności NC",empty_title:"Wczytaj kartę ustawczą",empty_text:"Wczytaj raport Excel z GibbsCAM Reporter. Możesz też przeciągnąć plik tutaj.",img_title:"Przypisz obraz",img_alt:"Obraz operacji {n}",img_add:"Dodaj obraz operacji<br>(kliknij lub upuść)",img_change:"Zmień obraz",img_addshort:"Dodaj obraz",before:"Przed",after:"Po",op_of:"Operacja {i} z {n}",cs:"Układ współrzędnych {n}",tool_missing:"Narzędzia nie ma na liście",coolant:"Chłodziwo",time:"Czas",length:"Długość",radius:"Promień",note:"Uwaga",feed:"Posuw",rpm:"Obroty",entry_feed:"Posuw wejścia",programmed:"Zaprogramowano",no_value:"Brak wartości w raporcie",reset:"Resetuj",equals:"odpowiada {v} {u}/min",changes:"Zmiany",no_changes:"Nie zmieniono jeszcze żadnej operacji. Przesuń suwak, aby dostosować posuw lub obroty; zmiany pozostają zapisane na tym urządzeniu.",changed_one:"1 operacja zmieniona",changed_many:"{n} operacji zmieniono",col_op:"Op",col_name:"Nazwa",changed_marker:"zmieniono",toast_img_err:"Obrazu operacji {n} nie można wyświetlić na tym urządzeniu",toast_imgs:"{n} obrazów przypisano",toast_not_recognized:"nierozpoznane",toast_no_ops:"W raporcie nie znaleziono operacji",toast_loaded:"{n} operacji wczytano z raportu",toast_with_images:", {n} z obrazem",toast_no_images:", nie znaleziono obrazów",toast_no_changes:"Brak zmian – nie ma czego zapisać",toast_cancel:"Zapis anulowany",toast_fail:"Nie udało się zapisać pliku towarzyszącego",toast_saved_changed:"{n} operacji zmieniono i zablokowano",toast_saved_all:"{c} zmieniono, wszystkie {n} operacji zablokowano",toast_unavail:"Zapis niemożliwy w tym widoku",toast_clip:"Zapis niemożliwy tutaj – plik skopiowano do schowka",operation:"Operacja",with_tool:"z T{n}",tool:"Narzędzie",runtime:"Czas cyklu",aria_pct:"{l} w procentach wartości zaprogramowanej",
+ opCodes:{Rough:"Zgrubna",Finish:"Wykańczająca",Drill:"Wiercenie",Tap:"Gwintowanie",Ream:"Rozwiercanie",Bore:"Wytaczanie",Contour:"Kontur",Face:"Planowanie",Pocket:"Kieszeń",Thread:"Gwint",Probe:"Pomiar"},
+ toolCodes:{REM:"Frez zgrubny",FEM:"Frez wykańczający",EM:"Frez trzpieniowy",BEM:"Frez kulisty",BUL:"Frez torusowy",FM:"Frez czołowy",DR:"Wiertło",DRL:"Wiertło",CD:"Nawiertak",SD:"Wiertło punktowe",TAP:"Gwintownik",RM:"Rozwiertak",BOR:"Wytaczadło",CS:"Pogłębiacz stożkowy",CB:"Pogłębiacz walcowy",TM:"Frez do gwintów",CH:"Frez do fazowania",KEY:"Frez do rowków",LOL:"Frez lollipop",PRB:"Sonda"}},
+ru:{load_report:"Загрузить отчёт",lock:"Блокировка",lock_changed:"только изменённые",lock_all:"все значения",save:"Сохранить",ops_header:"{n} операций в порядке УП",empty_title:"Загрузить наладочную карту",empty_text:"Загрузите Excel-отчёт из GibbsCAM Reporter. Файл также можно перетащить сюда.",img_title:"Назначить изображение",img_alt:"Изображение операции {n}",img_add:"Добавить изображение операции<br>(щёлкните или перетащите)",img_change:"Заменить изображение",img_addshort:"Добавить изображение",before:"До",after:"После",op_of:"Операция {i} из {n}",cs:"Система координат {n}",tool_missing:"Инструмента нет в списке",coolant:"СОЖ",time:"Время",length:"Длина",radius:"Радиус",note:"Примечание",feed:"Подача",rpm:"Обороты шпинделя",entry_feed:"Подача врезания",programmed:"Запрограммировано",no_value:"Нет значения в отчёте",reset:"Сбросить",equals:"соответствует {v} {u}/мин",changes:"Изменения",no_changes:"Операции ещё не изменялись. Сдвиньте ползунок, чтобы изменить подачу или обороты; изменения сохраняются на этом устройстве.",changed_one:"Изменена 1 операция",changed_many:"Изменено операций: {n}",col_op:"Оп",col_name:"Имя",changed_marker:"изменено",toast_img_err:"Изображение операции {n} нельзя показать на этом устройстве",toast_imgs:"Назначено изображений: {n}",toast_not_recognized:"не распознано",toast_no_ops:"В отчёте не найдено операций",toast_loaded:"Загружено операций из отчёта: {n}",toast_with_images:", с изображением: {n}",toast_no_images:", изображения не найдены",toast_no_changes:"Нет изменений – нечего сохранять",toast_cancel:"Сохранение отменено",toast_fail:"Не удалось сохранить сопроводительный файл",toast_saved_changed:"Изменено и заблокировано операций: {n}",toast_saved_all:"Изменено: {c}, заблокированы все {n} операций",toast_unavail:"Сохранение в этом режиме невозможно",toast_clip:"Сохранение здесь невозможно – файл скопирован в буфер обмена",operation:"Операция",with_tool:"инструментом T{n}",tool:"Инструмент",runtime:"Время цикла",aria_pct:"{l} в процентах от запрограммированного значения",
+ opCodes:{Rough:"Черновая",Finish:"Чистовая",Drill:"Сверление",Tap:"Нарезание резьбы",Ream:"Развёртывание",Bore:"Растачивание",Contour:"Контур",Face:"Торцевание",Pocket:"Карман",Thread:"Резьба",Probe:"Измерение"},
+ toolCodes:{REM:"Черновая концевая фреза",FEM:"Чистовая концевая фреза",EM:"Концевая фреза",BEM:"Сферическая фреза",BUL:"Тороидальная фреза",FM:"Торцевая фреза",DR:"Сверло",DRL:"Сверло",CD:"Центровочное сверло",SD:"Засверловочное сверло",TAP:"Метчик",RM:"Развёртка",BOR:"Расточная оправка",CS:"Зенковка",CB:"Цековка",TM:"Резьбовая фреза",CH:"Фреза для фасок",KEY:"Шпоночная фреза",LOL:"Фреза лоллипоп",PRB:"Щуп"}},
+tr:{load_report:"Raporu yükle",lock:"Kilitle",lock_changed:"yalnızca değişenler",lock_all:"tüm değerler",save:"Kaydet",ops_header:"NC sırasına göre {n} operasyon",empty_title:"Hazırlık sayfasını yükle",empty_text:"GibbsCAM Reporter'dan Excel raporunu yükleyin. Dosyayı buraya da bırakabilirsiniz.",img_title:"Görsel ata",img_alt:"Operasyon {n} görseli",img_add:"Operasyon görseli ekle<br>(tıkla veya bırak)",img_change:"Görseli değiştir",img_addshort:"Görsel ekle",before:"Önce",after:"Sonra",op_of:"Operasyon {i} / {n}",cs:"Koordinat sistemi {n}",tool_missing:"Takım listede yok",coolant:"Soğutma",time:"Süre",length:"Uzunluk",radius:"Yarıçap",note:"Not",feed:"İlerleme",rpm:"Devir",entry_feed:"Giriş ilerlemesi",programmed:"Programlanan",no_value:"Raporda değer yok",reset:"Sıfırla",equals:"{v} {u}/dk'ya eşit",changes:"Değişiklikler",no_changes:"Henüz operasyon değiştirilmedi. İlerleme veya devri ayarlamak için kaydırıcıyı hareket ettirin; değişiklikler bu cihazda saklanır.",changed_one:"1 operasyon değiştirildi",changed_many:"{n} operasyon değiştirildi",col_op:"Op",col_name:"Ad",changed_marker:"değiştirildi",toast_img_err:"Operasyon {n} görseli bu cihazda gösterilemiyor",toast_imgs:"{n} görsel atandı",toast_not_recognized:"tanınmadı",toast_no_ops:"Raporda operasyon bulunamadı",toast_loaded:"Rapordan {n} operasyon yüklendi",toast_with_images:", {n} görselli",toast_no_images:", görsel bulunamadı",toast_no_changes:"Değişiklik yok – kaydedilecek bir şey yok",toast_cancel:"Kaydetme iptal edildi",toast_fail:"Eşlik dosyası kaydedilemedi",toast_saved_changed:"{n} operasyon değiştirildi ve kilitlendi",toast_saved_all:"{c} değiştirildi, tüm {n} operasyon kilitlendi",toast_unavail:"Bu görünümde kaydedilemez",toast_clip:"Burada kaydedilemez – dosya panoya kopyalandı",operation:"Operasyon",with_tool:"T{n} ile",tool:"Takım",runtime:"Çevrim süresi",aria_pct:"Programlanan değerin yüzdesi olarak {l}",
+ opCodes:{Rough:"Kaba",Finish:"Finiş",Drill:"Delme",Tap:"Kılavuz",Ream:"Rayba",Bore:"Bara",Contour:"Kontur",Face:"Alın frezeleme",Pocket:"Cep",Thread:"Diş",Probe:"Prob"},
+ toolCodes:{REM:"Kaba parmak freze",FEM:"Finiş parmak freze",EM:"Parmak freze",BEM:"Küresel freze",BUL:"Torus freze",FM:"Alın frezesi",DR:"Matkap",DRL:"Matkap",CD:"Punta matkabı",SD:"Nokta matkabı",TAP:"Kılavuz",RM:"Rayba",BOR:"Bara çubuğu",CS:"Havşa",CB:"Düz havşa",TM:"Diş frezesi",CH:"Pah frezesi",KEY:"Kama kanalı frezesi",LOL:"Lolipop freze",PRB:"Prob"}},
+ja:{load_report:"レポートを読み込む",lock:"ロック",lock_changed:"変更分のみ",lock_all:"すべての値",save:"保存",ops_header:"NC順に{n}工程",empty_title:"段取りシートを読み込む",empty_text:"GibbsCAM ReporterのExcelレポートを読み込みます。ファイルをここにドロップすることもできます。",img_title:"画像を割り当て",img_alt:"工程{n}の画像",img_add:"工程の画像を追加<br>（クリックまたはドロップ）",img_change:"画像を変更",img_addshort:"画像を追加",before:"加工前",after:"加工後",op_of:"工程 {i} / {n}",cs:"座標系 {n}",tool_missing:"工具がリストにありません",coolant:"クーラント",time:"時間",length:"長さ",radius:"半径",note:"備考",feed:"送り",rpm:"主軸回転数",entry_feed:"進入送り",programmed:"プログラム値",no_value:"レポートに値がありません",reset:"リセット",equals:"{v} {u}/分に相当",changes:"変更",no_changes:"まだ変更された工程はありません。スライダーを動かして送りや回転数を調整してください。変更はこの端末に保存されます。",changed_one:"1工程を変更",changed_many:"{n}工程を変更",col_op:"工程",col_name:"名称",changed_marker:"変更済み",toast_img_err:"工程{n}の画像はこの端末では表示できません",toast_imgs:"{n}枚の画像を割り当てました",toast_not_recognized:"認識できません",toast_no_ops:"レポートに工程が見つかりません",toast_loaded:"レポートから{n}工程を読み込みました",toast_with_images:"、画像あり{n}",toast_no_images:"、画像が見つかりません",toast_no_changes:"変更なし – 保存するものがありません",toast_cancel:"保存をキャンセルしました",toast_fail:"連携ファイルを保存できませんでした",toast_saved_changed:"{n}工程を変更しロックしました",toast_saved_all:"{c}工程を変更、全{n}工程をロックしました",toast_unavail:"この表示では保存できません",toast_clip:"ここでは保存できません – ファイルをクリップボードにコピーしました",operation:"工程",with_tool:"T{n}使用",tool:"工具",runtime:"加工時間",aria_pct:"{l}（プログラム値に対する割合）",
+ opCodes:{Rough:"荒加工",Finish:"仕上げ",Drill:"穴あけ",Tap:"タップ",Ream:"リーマ",Bore:"ボーリング",Contour:"輪郭加工",Face:"正面フライス",Pocket:"ポケット",Thread:"ねじ切り",Probe:"計測"},
+ toolCodes:{REM:"荒加工エンドミル",FEM:"仕上げエンドミル",EM:"エンドミル",BEM:"ボールエンドミル",BUL:"ラジアスエンドミル",FM:"正面フライス",DR:"ドリル",DRL:"ドリル",CD:"センタードリル",SD:"スポットドリル",TAP:"タップ",RM:"リーマ",BOR:"ボーリングバー",CS:"皿もみ",CB:"座ぐり",TM:"ねじ切りフライス",CH:"面取りカッター",KEY:"キー溝カッター",LOL:"ロリポップカッター",PRB:"プローブ"}},
+zh:{load_report:"加载报告",lock:"锁定",lock_changed:"仅已更改",lock_all:"所有值",save:"保存",ops_header:"按NC顺序共{n}个工序",empty_title:"加载装夹单",empty_text:"加载GibbsCAM Reporter生成的Excel报告，也可以把文件拖到这里。",img_title:"指定图片",img_alt:"工序{n}的图片",img_add:"添加工序图片<br>（点击或拖放）",img_change:"更换图片",img_addshort:"添加图片",before:"加工前",after:"加工后",op_of:"工序 {i} / {n}",cs:"坐标系 {n}",tool_missing:"刀具不在列表中",coolant:"冷却",time:"时间",length:"长度",radius:"半径",note:"备注",feed:"进给",rpm:"主轴转速",entry_feed:"切入进给",programmed:"编程值",no_value:"报告中无此值",reset:"重置",equals:"相当于 {v} {u}/分",changes:"更改",no_changes:"尚未更改任何工序。移动滑块以调整进给或转速；更改会保存在本设备上。",changed_one:"已更改1个工序",changed_many:"已更改{n}个工序",col_op:"工序",col_name:"名称",changed_marker:"已更改",toast_img_err:"工序{n}的图片无法在本设备上显示",toast_imgs:"已指定{n}张图片",toast_not_recognized:"无法识别",toast_no_ops:"报告中未找到工序",toast_loaded:"已从报告加载{n}个工序",toast_with_images:"，{n}个带图片",toast_no_images:"，未找到图片",toast_no_changes:"没有更改 – 无需保存",toast_cancel:"已取消保存",toast_fail:"无法保存配套文件",toast_saved_changed:"已更改并锁定{n}个工序",toast_saved_all:"已更改{c}个，全部{n}个工序已锁定",toast_unavail:"此视图中无法保存",toast_clip:"此处无法保存 – 文件已复制到剪贴板",operation:"工序",with_tool:"使用T{n}",tool:"刀具",runtime:"加工时间",aria_pct:"{l}（编程值的百分比）",
+ opCodes:{Rough:"粗加工",Finish:"精加工",Drill:"钻孔",Tap:"攻丝",Ream:"铰孔",Bore:"镗孔",Contour:"轮廓",Face:"面铣",Pocket:"型腔",Thread:"螺纹",Probe:"测量"},
+ toolCodes:{REM:"粗加工立铣刀",FEM:"精加工立铣刀",EM:"立铣刀",BEM:"球头铣刀",BUL:"圆鼻铣刀",FM:"面铣刀",DR:"钻头",DRL:"钻头",CD:"中心钻",SD:"定点钻",TAP:"丝锥",RM:"铰刀",BOR:"镗刀杆",CS:"锪钻",CB:"沉孔钻",TM:"螺纹铣刀",CH:"倒角铣刀",KEY:"键槽铣刀",LOL:"棒棒糖铣刀",PRB:"测头"}},
+ko:{load_report:"리포트 불러오기",lock:"잠금",lock_changed:"변경된 값만",lock_all:"모든 값",save:"저장",ops_header:"NC 순서 {n}개 공정",empty_title:"셋업 시트 불러오기",empty_text:"GibbsCAM Reporter의 Excel 리포트를 불러옵니다. 파일을 여기로 끌어다 놓을 수도 있습니다.",img_title:"이미지 지정",img_alt:"공정 {n} 이미지",img_add:"공정 이미지 추가<br>(클릭 또는 드롭)",img_change:"이미지 변경",img_addshort:"이미지 추가",before:"가공 전",after:"가공 후",op_of:"공정 {i} / {n}",cs:"좌표계 {n}",tool_missing:"공구가 목록에 없음",coolant:"절삭유",time:"시간",length:"길이",radius:"반경",note:"비고",feed:"이송",rpm:"주축 회전수",entry_feed:"진입 이송",programmed:"프로그램 값",no_value:"리포트에 값 없음",reset:"초기화",equals:"{v} {u}/분에 해당",changes:"변경 사항",no_changes:"아직 변경된 공정이 없습니다. 슬라이더를 움직여 이송 또는 회전수를 조정하세요. 변경 사항은 이 기기에 저장됩니다.",changed_one:"1개 공정 변경됨",changed_many:"{n}개 공정 변경됨",col_op:"공정",col_name:"이름",changed_marker:"변경됨",toast_img_err:"공정 {n} 이미지를 이 기기에서 표시할 수 없습니다",toast_imgs:"{n}개 이미지 지정됨",toast_not_recognized:"인식 불가",toast_no_ops:"리포트에서 공정을 찾을 수 없습니다",toast_loaded:"리포트에서 {n}개 공정을 불러왔습니다",toast_with_images:", 이미지 포함 {n}개",toast_no_images:", 이미지를 찾을 수 없음",toast_no_changes:"변경 사항 없음 – 저장할 내용이 없습니다",toast_cancel:"저장이 취소되었습니다",toast_fail:"동반 파일을 저장할 수 없습니다",toast_saved_changed:"{n}개 공정 변경 및 잠금",toast_saved_all:"{c}개 변경, 전체 {n}개 공정 잠금",toast_unavail:"이 화면에서는 저장할 수 없습니다",toast_clip:"여기서는 저장할 수 없습니다 – 파일을 클립보드에 복사했습니다",operation:"공정",with_tool:"T{n} 사용",tool:"공구",runtime:"가공 시간",aria_pct:"프로그램 값 대비 {l} 백분율",
+ opCodes:{Rough:"황삭",Finish:"정삭",Drill:"드릴링",Tap:"탭핑",Ream:"리밍",Bore:"보링",Contour:"윤곽",Face:"페이스 밀링",Pocket:"포켓",Thread:"나사",Probe:"측정"},
+ toolCodes:{REM:"황삭 엔드밀",FEM:"정삭 엔드밀",EM:"엔드밀",BEM:"볼 엔드밀",BUL:"불노즈 엔드밀",FM:"페이스 밀",DR:"드릴",DRL:"드릴",CD:"센터 드릴",SD:"스팟 드릴",TAP:"탭",RM:"리머",BOR:"보링 바",CS:"카운터싱크",CB:"카운터보어",TM:"나사 밀",CH:"챔퍼 밀",KEY:"키홈 커터",LOL:"롤리팝 커터",PRB:"프로브"}}
+};
+let lang = "en";
+try{ const saved = localStorage.getItem("sfc:lang"); if(saved && I18N[saved]) lang = saved; }catch(e){}
+function t(k, v){ let s = (I18N[lang] && I18N[lang][k]) ?? I18N.en[k] ?? k; if(v) for(const key in v) s = s.split("{"+key+"}").join(v[key]); return s; }
+const t_ = t; // Alias für Funktionen, in denen "t" das Werkzeug ist
+function OPC(){ return (I18N[lang] && I18N[lang].opCodes) || I18N.en.opCodes; }
+function TC(){ return (I18N[lang] && I18N[lang].toolCodes) || I18N.en.toolCodes; }
+
 
 // ---------- Zustand ----------
 let data = null;        // normalisierter Export
@@ -202,13 +261,13 @@ let reportName = "";    // Dateiname des Reports
 let sheetPaths = {};    // Blattname -> Pfad im xlsx-Paket
 let downloads = null;   // Artifact-Capability (optional)
 
-const TOOL_TYPE_NAMES = {end_mill:"Schaftfräser",ball_mill:"Kugelfräser",bull_nose:"Torusfräser",face_mill:"Planfräser",drill:"Bohrer",center_drill:"Zentrierbohrer",spot_drill:"Anbohrer",tap:"Gewindebohrer",reamer:"Reibahle",boring_bar:"Bohrstange",turning:"Drehmeißel",grooving:"Stechmeißel",threading:"Gewindedrehen",probe:"Messtaster",other:"Werkzeug"};
-const OP_TYPE_NAMES = {roughing:"Schruppen",finishing:"Schlichten",drilling:"Bohren",tapping:"Gewindebohren",reaming:"Reiben",boring:"Ausspindeln",contouring:"Konturfräsen",facing:"Planen",threading:"Gewinde",grooving:"Einstechen",parting:"Abstechen",probing:"Messen",other:""};
-const COOLANT_NAMES = {flood:"Emulsion",through_tool:"Innenkühlung",mist:"Minimalmenge",air:"Luft",none:"ohne"};
+const TOOL_TYPE_NAMES = {end_mill:"End mill",ball_mill:"Ball end mill",bull_nose:"Bull nose end mill",face_mill:"Face mill",drill:"Drill",center_drill:"Center drill",spot_drill:"Spot drill",tap:"Tap",reamer:"Reamer",boring_bar:"Boring bar",turning:"Turning tool",grooving:"Grooving tool",threading:"Threading tool",probe:"Probe",other:"Tool"};
+const OP_TYPE_NAMES = {roughing:"Roughing",finishing:"Finishing",drilling:"Drilling",tapping:"Tapping",reaming:"Reaming",boring:"Boring",contouring:"Contouring",facing:"Facing",threading:"Threading",grooving:"Grooving",parting:"Parting",probing:"Probing",other:""};
+const COOLANT_NAMES = {flood:"Flood",through_tool:"Through tool",mist:"Mist",air:"Air",none:"none"};
 
 const $ = (s,el=document)=>el.querySelector(s);
 const app = $("#app");
-const fmt = (n,d=0)=> (n==null||isNaN(n)) ? "–" : Number(n).toLocaleString("de-DE",{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmt = (n,d=0)=> (n==null||isNaN(n)) ? "–" : Number(n).toLocaleString(LOCALES[lang]||"en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
 
 // ---------- Laden & Normalisieren ----------
 function parseExport(text){
@@ -228,7 +287,7 @@ function normalize(raw){
     const id = t.toolId || ("T"+t.toolNumber);
     tools[id] = {
       id, number: t.toolNumber,
-      name: t.name || (TOOL_TYPE_NAMES[t.toolType]||"Werkzeug")+(t.diameterMm||t.diameter ? " D"+(t.diameterMm||t.diameter):""),
+      name: t.name || (TOOL_TYPE_NAMES[t.toolType]||"Tool")+(t.diameterMm||t.diameter ? " D"+(t.diameterMm||t.diameter):""),
       type: t.toolType ? (TOOL_TYPE_NAMES[t.toolType]||t.toolType) : (t.gibbsToolType!=null ? "GibbsCAM-Typ "+t.gibbsToolType : ""),
       dia: t.diameterMm ?? t.diameter ?? null,
       flutes: t.fluteCount ?? null,
@@ -279,8 +338,8 @@ function render(){
   $("#lockMode").setAttribute("aria-disabled","false");
   app.innerHTML = `
   <div class="layout">
-    <nav class="oplist" aria-label="Operationen">
-      <h2>${data.ops.length} Operationen in NC-Reihenfolge</h2>
+    <nav class="oplist" aria-label="Operations">
+      <h2>${t("ops_header",{n:data.ops.length})}</h2>
       <ol id="oplist"></ol>
     </nav>
     <section class="detail" id="detail"></section>
@@ -295,10 +354,10 @@ function renderEmpty(){
   $("#lockMode").setAttribute("aria-disabled","true");
   app.innerHTML = `
   <div class="empty" id="drop">
-    <h2>Rüstplan laden</h2>
-    <p>Lade den Excel-Report aus dem GibbsCAM-Reporter. Du kannst die Datei auch direkt hierher ziehen.</p>
+    <h2>${t("empty_title")}</h2>
+    <p>${t("empty_text")}</p>
     <div class="row">
-      <button class="btn primary" id="btnReport">Report laden</button>
+      <button class="btn primary" id="btnReport">${t("load_report")}</button>
     </div>
   </div>`;
   $("#btnReport").onclick = ()=>$("#fileXlsx").click();
@@ -315,7 +374,7 @@ function renderList(){
     const li = document.createElement("li");
     li.setAttribute("aria-current", i===current ? "true":"false");
     li.className = isChanged(o.opNo) ? "changed":"";
-    li.innerHTML = `<span class="no">${o.opNo}</span><span><div class="nm">${esc(o.name)}</div><div class="tl">${t? esc(t.id+" · "+t.name) : esc(o.toolId||"")}</div></span><span class="dot" title="geändert"></span>`;
+    li.innerHTML = `<span class="no">${o.opNo}</span><span><div class="nm">${esc(o.name)}</div><div class="tl">${t? esc(t.id+" · "+t.name) : esc(o.toolId||"")}</div></span><span class="dot" title="${t_("changed_marker")}"></span>`;
     li.onclick = ()=>{ current=i; renderList(); renderDetail(); };
     ol.appendChild(li);
   });
@@ -327,19 +386,19 @@ function toolSvg(){
 
 function renderDetail(){
   const o = data.ops[current]; if(!o){ $("#detail").innerHTML=""; return; }
-  const t = data.tools[o.toolId] || {id:o.toolId||"–",name:"Werkzeug nicht in Liste",type:"",dia:null,flutes:null,holder:"",vendor:""};
+  const t = data.tools[o.toolId] || {id:o.toolId||"–",name:t_("tool_missing"),type:"",dia:null,flutes:null,holder:"",vendor:""};
   const ov = overrides[o.opNo] || {feedPct:100,rpmPct:100,entryFeedPct:100};
   const img = images[o.opNo];
   const el = $("#detail");
   el.innerHTML = `
   <article class="card ophead">
-    <div class="img" id="imgBox" title="Bild zuordnen">
-      ${img ? `<img src="${img}" alt="Bild zu Operation ${o.opNo}" onerror="window.__imgErr&&window.__imgErr(${o.opNo})">` : `<div class="ph">${toolSvg()}Bild der Operation hinzufügen<br>(Klick oder Ablegen)</div>`}
-      <span class="chg">${img? "Bild ändern":"Bild hinzufügen"}</span>
-      ${imageSets[o.opNo] && imageSets[o.opNo].start && imageSets[o.opNo].end ? `<div class="imgtog"><button type="button" data-v="start" class="${(imageView[o.opNo]||"end")==="start"?"on":""}">Vorher</button><button type="button" data-v="end" class="${(imageView[o.opNo]||"end")==="end"?"on":""}">Nachher</button></div>`:""}
+    <div class="img" id="imgBox" title="${t_("img_title")}">
+      ${img ? `<img src="${img}" alt="${t_("img_alt",{n:o.opNo})}" onerror="window.__imgErr&&window.__imgErr(${o.opNo})">` : `<div class="ph">${toolSvg()}${t_("img_add")}</div>`}
+      <span class="chg">${img? t_("img_change"):t_("img_addshort")}</span>
+      ${imageSets[o.opNo] && imageSets[o.opNo].start && imageSets[o.opNo].end ? `<div class="imgtog"><button type="button" data-v="start" class="${(imageView[o.opNo]||"end")==="start"?"on":""}">${t_("before")}</button><button type="button" data-v="end" class="${(imageView[o.opNo]||"end")==="end"?"on":""}">${t_("after")}</button></div>`:""}
     </div>
     <div class="opinfo">
-      <div class="step">Operation ${o.opNo} von ${data.ops.length}${o.type? " · "+esc(o.type):""}${o.cs!=null? " · Koordinatensystem "+o.cs:""}</div>
+      <div class="step">${t_("op_of",{i:o.opNo,n:data.ops.length})}${o.type? " · "+esc(o.type):""}${o.cs!=null? " · "+t_("cs",{n:o.cs}):""}</div>
       <h2>${esc(o.name)}</h2>
       <div class="tool">
         <div class="tno">${esc(t.id)}</div>
@@ -348,18 +407,18 @@ function renderDetail(){
       <div class="meta">
         ${o.ap!=null? `<span>ap <b>${fmt(o.ap,2)} ${data.units}</b></span>`:""}
         ${o.ae!=null? `<span>ae <b>${fmt(o.ae,2)} ${data.units}</b></span>`:""}
-        ${o.coolant? `<span>Kühlung <b>${esc(o.coolant)}</b></span>`:""}
-        ${o.timeSec!=null? `<span>Zeit <b>${fmtTime(o.timeSec)}</b></span>`:""}
-        ${t.lenReg!=null? `<span>Länge <b>H${t.lenReg}</b></span>`:""}
-        ${t.radReg!=null? `<span>Radius <b>D${t.radReg}</b></span>`:""}
+        ${o.coolant? `<span>${t_("coolant")} <b>${esc(o.coolant)}</b></span>`:""}
+        ${o.timeSec!=null? `<span>${t_("time")} <b>${fmtTime(o.timeSec)}</b></span>`:""}
+        ${t.lenReg!=null? `<span>${t_("length")} <b>H${t.lenReg}</b></span>`:""}
+        ${t.radReg!=null? `<span>${t_("radius")} <b>D${t.radReg}</b></span>`:""}
       </div>
-      ${o.notes? `<div class="meta"><span>Hinweis: <b>${esc(o.notes)}</b></span></div>`:""}
+      ${o.notes? `<div class="meta"><span>${t_("note")}: <b>${esc(o.notes)}</b></span></div>`:""}
     </div>
   </article>
   <div class="sliders">
-    ${sliderHtml("feed","Vorschub",o.feed, o.feedPerRev ? data.units+"/U" : data.units+"/min", ov.feedPct)}
-    ${sliderHtml("rpm","Drehzahl",o.rpm, "min⁻¹", ov.rpmPct)}
-    ${sliderHtml("entryFeed","Eintauchvorschub (Entry Feed)",o.entryFeed, o.feedPerRev ? data.units+"/U" : data.units+"/min", ov.entryFeedPct ?? 100)}
+    ${sliderHtml("feed",t_("feed"),o.feed, o.feedPerRev ? data.units+"/U" : data.units+"/min", ov.feedPct)}
+    ${sliderHtml("rpm",t_("rpm"),o.rpm, "min⁻¹", ov.rpmPct)}
+    ${sliderHtml("entryFeed",t_("entry_feed"),o.entryFeed, o.feedPerRev ? data.units+"/U" : data.units+"/min", ov.entryFeedPct ?? 100)}
   </div>
   <article class="card summary" id="summary"></article>`;
 
@@ -383,10 +442,10 @@ function sliderHtml(key,label,nominal,unit,pct){
   <article class="card slide ${pct!==100?"changed":""}" id="sl-${key}">
     <div class="lbl"><span>${label}</span><span class="pct" id="pct-${key}">${pct} %</span></div>
     <div class="val"><span class="n" id="val-${key}">${has? fmt(val, /\/U$/.test(unit)?3:0):"–"}</span><span class="u">${unit}</span></div>
-    <div class="nom" id="nom-${key}">${has? "Programmiert: "+fmt(nominal, /\/U$/.test(unit)?3:0)+" "+unit : "Kein Wert im Export"}</div>
-    <input type="range" id="rng-${key}" min="25" max="175" step="1" value="${pct}" ${has?"":"disabled"} aria-label="${label} in Prozent des programmierten Werts" style="--fill:${(pct-25)/150*100}%">
+    <div class="nom" id="nom-${key}">${has? t("programmed")+": "+fmt(nominal, /\/U$/.test(unit)?3:0)+" "+unit : t("no_value")}</div>
+    <input type="range" id="rng-${key}" min="25" max="175" step="1" value="${pct}" ${has?"":"disabled"} aria-label="${t("aria_pct",{l:label})}" style="--fill:${(pct-25)/150*100}%">
     <div class="ticks"><span>25 %</span><span>100 %</span><span>175 %</span></div>
-    <div class="foot"><span class="derived" id="der-${key}"></span><button class="btn quiet" id="rst-${key}" ${pct===100?"disabled":""}>Zurücksetzen</button></div>
+    <div class="foot"><span class="derived" id="der-${key}"></span><button class="btn quiet" id="rst-${key}" ${pct===100?"disabled":""}>${t("reset")}</button></div>
   </article>`;
 }
 
@@ -419,7 +478,7 @@ function updateDerived(o,t){
   const isMm = data.units==="mm";
   let rpmTxt="", feedTxt="";
   if(n && t.dia){ const vc = Math.PI*t.dia*n/(isMm?1000:12); rpmTxt = "vc ≈ "+fmt(vc, isMm?0:0)+(isMm?" m/min":" ft/min"); }
-  if(o.feedPerRev){ if(f && n) feedTxt = "entspricht "+fmt(f*n)+" "+data.units+"/min"; }
+  if(o.feedPerRev){ if(f && n) feedTxt = t_("equals",{v:fmt(f*n),u:data.units}); }
   else if(f && n && t.flutes){ const fz = f/(n*t.flutes); feedTxt = "fz ≈ "+fmt(fz,3)+" "+data.units; }
   else if(f && n){ const fu = f/n; feedTxt = "f ≈ "+fmt(fu,3)+" "+data.units+"/U"; }
   const dr=$("#der-rpm"), df=$("#der-feed");
@@ -429,9 +488,9 @@ function updateDerived(o,t){
 function renderSummary(){
   const el = $("#summary"); if(!el) return;
   const changed = data.ops.filter(o=>isChanged(o.opNo));
-  if(!changed.length){ el.innerHTML = `<h3>Änderungen</h3><div class="none">Noch keine Operation geändert. Schieber verschieben, um Vorschub oder Drehzahl anzupassen; Änderungen bleiben auf diesem Gerät gespeichert.</div>`; return; }
-  el.innerHTML = `<h3>${changed.length} ${changed.length===1?"Operation":"Operationen"} geändert</h3>
-  <div class="wrap"><table><thead><tr><th>Op</th><th>Name</th><th class="num">Vorschub</th><th class="num">Drehzahl</th><th class="num">Entry Feed</th></tr></thead><tbody>
+  if(!changed.length){ el.innerHTML = `<h3>${t("changes")}</h3><div class="none">${t("no_changes")}</div>`; return; }
+  el.innerHTML = `<h3>${changed.length===1? t("changed_one") : t("changed_many",{n:changed.length})}</h3>
+  <div class="wrap"><table><thead><tr><th>${t("col_op")}</th><th>${t("col_name")}</th><th class="num">${t("feed")}</th><th class="num">${t("rpm")}</th><th class="num">${t("entry_feed")}</th></tr></thead><tbody>
   ${changed.map(o=>{const ov=overrides[o.opNo]; return `<tr><td>${o.opNo}</td><td>${esc(o.name)}</td><td class="num">${ov.feedPct!==100? fmt(o.feed*ov.feedPct/100)+" ("+ov.feedPct+" %)":"–"}</td><td class="num">${ov.rpmPct!==100? fmt(o.rpm*ov.rpmPct/100)+" ("+ov.rpmPct+" %)":"–"}</td><td class="num">${(ov.entryFeedPct??100)!==100? fmt(o.entryFeed*ov.entryFeedPct/100)+" ("+ov.entryFeedPct+" %)":"–"}</td></tr>`;}).join("")}
   </tbody></table></div>`;
 }
@@ -439,7 +498,7 @@ function renderSummary(){
 function isChanged(opNo){ const ov=overrides[opNo]; return !!ov && (ov.feedPct!==100 || ov.rpmPct!==100 || (ov.entryFeedPct??100)!==100); }
 function fmtTime(s){ if(s==null) return "–"; if(s<90) return fmt(s)+" s"; const m=Math.floor(s/60), r=Math.round(s%60); return m+" min"+(r? " "+r+" s":""); }
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-window.__imgErr = function(opNo){ toast("Bild zu Operation "+opNo+" kann auf diesem Gerät nicht angezeigt werden"); };
+window.__imgErr = function(opNo){ toast(t("toast_img_err",{n:opNo})); };
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._h); toast._h=setTimeout(()=>t.classList.remove("show"),2600); }
 
 // ---------- Dateien ----------
@@ -460,6 +519,20 @@ try{ lockMode = localStorage.getItem("sfc:lockMode")==="all" ? "all" : "changed"
 function renderLockMode(){ $("#lockMode").querySelectorAll("button").forEach(b=>b.setAttribute("aria-checked", b.dataset.v===lockMode ? "true":"false")); }
 $("#lockMode").querySelectorAll("button").forEach(b=>b.onclick=()=>{ lockMode=b.dataset.v; try{ localStorage.setItem("sfc:lockMode",lockMode); }catch(e){} renderLockMode(); });
 renderLockMode();
+// Sprachauswahl
+(function(){
+  const sel=$("#langSel");
+  LANGS.forEach(([code,name])=>{ const o=document.createElement("option"); o.value=code; o.textContent=name; sel.appendChild(o); });
+  sel.value=lang;
+  sel.onchange=()=>{ lang=sel.value; try{ localStorage.setItem("sfc:lang",lang); }catch(e){} applyLang(); };
+})();
+function applyLang(){
+  document.documentElement.lang=lang;
+  document.querySelectorAll("[data-t]").forEach(el=>el.textContent=t(el.dataset.t));
+  if(data){ render(); } else { renderEmpty(); }
+}
+applyLang();
+
 $("#btnXlsx").onclick = ()=>$("#fileXlsx").click();
 
 // Mehrere Bilder: Zuordnung ueber die Zahl im Dateinamen (Op6.png, op_06.jpg, 6.png)
@@ -473,15 +546,13 @@ $("#fileImgs").addEventListener("change",e=>{
     if(op){ if(images[op.opNo]) URL.revokeObjectURL(images[op.opNo]); images[op.opNo]=URL.createObjectURL(f); hit++; } else miss.push(f.name);
   });
   renderDetail();
-  toast(hit+" Bilder zugeordnet"+(miss.length? ", nicht erkannt: "+miss.join(", "):""));
+  toast(t("toast_imgs",{n:hit})+(miss.length? ", "+t("toast_not_recognized")+": "+miss.join(", "):""));
 });
 
 // ---------- GibbsCAM-Report (.xlsx) direkt laden ----------
 // Aufbau des Standard-Reports: je Operation ein Block von 8 Zeilen mit
 // Beschriftung/Wert-Paaren (Operation, Tool #, RPM, Con. Feed, ...),
 // links das Bild "Start Condition", rechts "End Condition".
-const TOOL_CODES = {REM:"Schruppfräser",FEM:"Schlichtfräser",EM:"Schaftfräser",BEM:"Kugelfräser",BUL:"Torusfräser",FM:"Planfräser",DR:"Bohrer",DRL:"Bohrer",CD:"Zentrierbohrer",SD:"Anbohrer",TAP:"Gewindebohrer",RM:"Reibahle",BOR:"Bohrstange",CS:"Senker",CB:"Zapfensenker",TM:"Gewindefräser",CH:"Fasenfräser",KEY:"Scheibenfräser",LOL:"Lollipop-Fräser",PRB:"Messtaster"};
-const OP_CODES = {Rough:"Schruppen",Finish:"Schlichten",Drill:"Bohren",Tap:"Gewindebohren",Ream:"Reiben",Bore:"Ausspindeln",Contour:"Konturfräsen",Face:"Planen",Pocket:"Taschenfräsen",Thread:"Gewinde",Probe:"Messen"};
 
 function cellStr(v){ return v==null? "" : String(v).trim(); }
 function num(v){ const n = typeof v==="number"? v : parseFloat(String(v).replace(",",".")); return isNaN(n)? null : n; }
@@ -522,12 +593,10 @@ async function importReport(file){
         const tcode = cellStr(kv["Tool Type"]); const dia = num(kv["Tool Dia."]);
         if(toolNo!=null && !toolsByNo[toolNo]) toolsByNo[toolNo] = {toolNumber:toolNo, code:tcode, dia, lenReg:num(kv["LOFF #"]), radReg:num(kv["DOFF #"]??kv["Offset#"])};
         const otype = cellStr(kv["Op. Type"]);
-        ops.push({
+        ops.push({ typeCode: otype,
           opNo, sheet:sheetName, rowIdx:r,
           cells:{ rpm: kc["RPM"]||null, feed: kc["Con. Feed"]||kc["Feed/Rev"]||null, entryFeed: kc["Entry Feed"]||null },
           toolNumber: toolNo,
-          name: (OP_CODES[otype]||otype||"Operation")+(toolNo!=null? " mit T"+toolNo:""),
-          type: OP_CODES[otype]||otype,
           toolId: toolNo!=null? "T"+toolNo : null,
           rpm: num(kv["RPM"]), feed: num(kv["Con. Feed"]??kv["Feed/Rev"]), entryFeed: num(kv["Entry Feed"]),
           feedPerRev: kv["Con. Feed"]==null && kv["Feed/Rev"]!=null,
@@ -540,18 +609,24 @@ async function importReport(file){
         if(dr) picJobs.push({opNo, anchors: dr.anchors.filter(a=>Math.abs(a.row-r)<=2), zip, relMap: dr.relMap});
       }
     }
-    if(!ops.length){ toast("Im Report wurden keine Operationen gefunden"); return; }
+    if(!ops.length){ toast(t("toast_no_ops")); return; }
     ops.sort((a,b)=>a.opNo-b.opNo);
+    // Name und Typ sprachabhängig berechnen (Umschalten ohne Neuladen)
+    ops.forEach(o=>{
+      Object.defineProperty(o,"type",{get(){ return OPC()[o.typeCode]||o.typeCode; }, enumerable:true});
+      Object.defineProperty(o,"name",{get(){ return (OPC()[o.typeCode]||o.typeCode||t("operation"))+(o.toolNumber!=null? " "+t("with_tool",{n:o.toolNumber}):""); }, enumerable:true});
+    });
 
     // Werkzeuge: Namen aus einem zuvor geladenen Makro-Export übernehmen, wenn vorhanden
     const tools={};
     Object.values(toolsByNo).forEach(t=>{
       const id="T"+t.toolNumber; const j = jsonTools && Object.values(jsonTools).find(x=>x.number===t.toolNumber);
-      tools[id]={ id, number:t.toolNumber,
-        name: (j&&j.name) || ((TOOL_CODES[t.code]||t.code||"Werkzeug")+(t.dia!=null? " Ø "+t.dia:"")),
-        type: TOOL_CODES[t.code] ? TOOL_CODES[t.code]+" ("+t.code+")" : (t.code||""),
+      const tool={ id, number:t.toolNumber, code:t.code, name0:(j&&j.name)||null,
         dia: t.dia ?? (j&&j.dia) ?? null, flutes: (j&&j.flutes)||null, holder:(j&&j.holder)||"", vendor:(j&&j.vendor)||"",
         lenReg:t.lenReg, radReg:t.radReg };
+      Object.defineProperty(tool,"name",{get(){ return tool.name0 || ((TC()[tool.code]||tool.code||t_("tool"))+(tool.dia!=null? " Ø "+tool.dia:"")); }, enumerable:true});
+      Object.defineProperty(tool,"type",{get(){ return TC()[tool.code] ? TC()[tool.code]+" ("+tool.code+")" : (tool.code||""); }, enumerable:true});
+      tools[id]=tool;
     });
 
     const partName = program.partFile.replace(/\.vnc$/i,"") || file.name.replace(/\.xlsx$/i,"");
@@ -564,7 +639,7 @@ async function importReport(file){
     reportBuf = buf; reportName = file.name; sheetPaths = {}; Object.entries(sheetDrawings).forEach(([k,v])=>sheetPaths[k]=v.path);
     current=0; images={}; imageSets={}; imageView={};
     loadOverrides();
-    $("#progLabel").textContent = data.name + (program.runTimeSec? " · Laufzeit "+fmtTime(program.runTimeSec):"");
+    $("#progLabel").textContent = data.name + (program.runTimeSec? " · "+t("runtime")+" "+fmtTime(program.runTimeSec):"");
     render();
 
     // Bilder: links (Spalte < 5) = Start, rechts = Ende
@@ -586,7 +661,7 @@ async function importReport(file){
       if(set.start||set.end){ imageSets[job.opNo]=set; images[job.opNo]=set.end||set.start; imageView[job.opNo]=set.end?"end":"start"; n++; }
     }
     renderDetail();
-    toast(ops.length+" Operationen aus dem Report geladen"+(n? ", "+n+" mit Bild":", keine Bilder gefunden ["+((window.__imgDiag||[]).join("; ")||"keine Diagnose")+"]")+(window.__bmpErr? " – BMP-Umwandlung fehlgeschlagen: "+window.__bmpErr : (window.__bmpOk? " ("+window.__bmpOk+" Bitmaps umgewandelt)":"")));
+    toast(t("toast_loaded",{n:ops.length})+(n? t("toast_with_images",{n}) : t("toast_no_images")+" ["+((window.__imgDiag||[]).join("; ")||"-")+"]")+(window.__bmpErr? " – BMP: "+window.__bmpErr : ""));
   }catch(err){ console.error(err); toast("Report konnte nicht gelesen werden: "+err.message); }
 }
 
@@ -694,20 +769,20 @@ async function buildXlsxCopy(rows){
 async function saveAll(){
   if(!data) return;
   const rows = changedRows(lockMode==="all");
-  if(!rows.length){ toast("Keine Änderungen – nichts zu speichern"); return; }
+  if(!rows.length){ toast(t("toast_no_changes")); return; }
   const nChanged = rows.filter(r=>isChanged(r.op.opNo)).length;
   const base = (reportName ? reportName.replace(/\.xlsx$/i,"") : (data.programId||"Ruestplan")).replace(/[\\\/:*?"<>|]+/g,"_") + "_Op";
   const txt = buildTxt(rows);
   if(!downloads){
-    try{ await navigator.clipboard.writeText(txt); toast("Speichern hier nicht möglich – Begleitdatei in die Zwischenablage kopiert"); }catch(e){ toast("Speichern in dieser Ansicht nicht möglich"); }
+    try{ await navigator.clipboard.writeText(txt); toast(t("toast_clip")); }catch(e){ toast(t("toast_unavail")); }
     return;
   }
   // Nur die Begleitdatei speichern: eine Datei, direkt vom Import-Makro lesbar.
   // (Die Report-Kopie als .xlsx bleibt als Funktion buildXlsxCopy erhalten.)
   let saved=0;
   try{ await downloads.save({filename: base+".txt", data: txt}); saved=1; }
-  catch(e){ if(e && e.code==="declined"){ toast("Speichern abgebrochen"); return; } toast("Begleitdatei konnte nicht gespeichert werden"); return; }
-  const what = lockMode==="all" ? nChanged+" geändert, alle "+rows.length+" Operationen gesperrt" : rows.length+" Operationen geändert und gesperrt";
+  catch(e){ if(e && e.code==="declined"){ toast(t("toast_cancel")); return; } toast(t("toast_fail")); return; }
+  const what = lockMode==="all" ? t("toast_saved_all",{c:nChanged,n:rows.length}) : t("toast_saved_changed",{n:rows.length});
   toast(what+" – "+base+".txt");
 }
 $("#btnSave").onclick = saveAll;
