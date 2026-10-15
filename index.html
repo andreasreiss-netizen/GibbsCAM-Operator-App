@@ -290,16 +290,12 @@ function renderEmpty(){
   app.innerHTML = `
   <div class="empty" id="drop">
     <h2>Rüstplan laden</h2>
-    <p>Lade den Excel-Report aus dem GibbsCAM-Reporter (mit Bildern) oder die JSON-Datei aus dem Makro. Ziehen und Ablegen funktioniert für beide.</p>
+    <p>Lade den Excel-Report aus dem GibbsCAM-Reporter. Du kannst die Datei auch direkt hierher ziehen.</p>
     <div class="row">
-      <button class="btn primary" id="btnPick">Datei auswählen</button>
-      <button class="btn" id="btnReport">Report (.xlsx) laden</button>
-      <button class="btn" id="btnDemo">Beispiel ansehen</button>
+      <button class="btn primary" id="btnReport">Report laden</button>
     </div>
   </div>`;
-  $("#btnPick").onclick = ()=>$("#fileJson").click();
   $("#btnReport").onclick = ()=>$("#fileXlsx").click();
-  $("#btnDemo").onclick = ()=>setData(normalize(DEMO));
   const drop = $("#drop");
   drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("drag");});
   drop.addEventListener("dragleave",()=>drop.classList.remove("drag"));
