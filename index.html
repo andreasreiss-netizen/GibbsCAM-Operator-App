@@ -568,6 +568,7 @@ async function importReport(file){
       for(const a of job.anchors){
         const target=job.relMap[a.rid]; if(!target) continue;
         const path = target.startsWith("/") ? target.slice(1) : "xl/"+target.replace(/^\.\.\//,"");
+        if(!job.zip.file(path)) { window.__imgDiag=(window.__imgDiag||[]).concat(["Bild fehlt: "+path]); }
         const f=job.zip.file(path); if(!f) continue;
         const ext=path.split(".").pop().toLowerCase();
         const ab = await f.async("arraybuffer");
@@ -579,7 +580,7 @@ async function importReport(file){
       if(set.start||set.end){ imageSets[job.opNo]=set; images[job.opNo]=set.end||set.start; imageView[job.opNo]=set.end?"end":"start"; n++; }
     }
     renderDetail();
-    toast(ops.length+" Operationen aus dem Report geladen"+(n? ", "+n+" mit Bild":", keine Bilder gefunden")+(window.__bmpErr? " – BMP-Umwandlung fehlgeschlagen: "+window.__bmpErr : (window.__bmpOk? " ("+window.__bmpOk+" Bitmaps umgewandelt)":"")));
+    toast(ops.length+" Operationen aus dem Report geladen"+(n? ", "+n+" mit Bild":", keine Bilder gefunden ["+((window.__imgDiag||[]).join("; ")||"keine Diagnose")+"]")+(window.__bmpErr? " – BMP-Umwandlung fehlgeschlagen: "+window.__bmpErr : (window.__bmpOk? " ("+window.__bmpOk+" Bitmaps umgewandelt)":"")));
   }catch(err){ console.error(err); toast("Report konnte nicht gelesen werden: "+err.message); }
 }
 
@@ -604,37 +605,39 @@ async function bmpToPngBlob(buf){
 }
 
 async function mapSheetDrawings(zip){
-  const out={};
-  // Safari (iOS/iPadOS) verwirft XML mit fuehrender Byte-Order-Markierung; Chrome ueberliest sie.
-  const clean = t=>t.replace(/^\uFEFF/,"").replace(/^\s+/,"");
-  const parse = async p=>{ const f=zip.file(p); if(!f) return null; const d=new DOMParser().parseFromString(clean(await f.async("string")),"application/xml"); return d.getElementsByTagName("parsererror").length? null : d; };
-  // Relationships per Textmuster lesen – unabhaengig vom XML-Parser des Browsers
-  const relsOf = async p=>{ const f=zip.file(p); const m={}; if(!f) return m; const t=clean(await f.async("string"));
-    for(const tag of t.match(/<Relationship\b[^>]*>/g)||[]){ const g=a=>{ const x=tag.match(new RegExp(a+'="([^"]*)"')); return x? x[1] : ""; }; const id=g("Id"); if(id) m[id]={target:g("Target"),type:g("Type")}; }
-    return m; };
-  const wbx = await parse("xl/workbook.xml"); if(!wbx) return out;
+  // Vollstaendig per Textmuster, ohne DOMParser: Safari (iOS/iPadOS) verwirft Teile
+  // dieser XML-Dateien (BOM, Namensraum-Deklarationen), Chrome ueberliest sie.
+  const out={}; const diag=[];
+  const text = async p=>{ const f=zip.file(p); return f? (await f.async("string")).replace(/^\uFEFF/,"") : null; };
+  const attr = (tag,name)=>{ const m=tag.match(new RegExp('(?:^|\\s)'+name+'="([^"]*)"')); return m? m[1] : ""; };
+  const relsOf = async p=>{ const t=await text(p); const m={}; if(!t){ diag.push("fehlt: "+p); return m; }
+    for(const tag of t.match(/<Relationship\b[^>]*>/g)||[]){ const id=attr(tag,"Id"); if(id) m[id]={target:attr(tag,"Target"),type:attr(tag,"Type")}; } return m; };
+  const resolve = (base,target)=>{ if(target.startsWith("/")) return target.slice(1); const dir=base.split("/").slice(0,-1); for(const seg of target.split("/")){ if(seg==="..") dir.pop(); else if(seg!==".") dir.push(seg); } return dir.join("/"); };
+  const wbx = await text("xl/workbook.xml"); if(!wbx){ diag.push("workbook.xml fehlt"); window.__imgDiag=diag; return out; }
   const wbRels = await relsOf("xl/_rels/workbook.xml.rels");
-  for(const sh of [...wbx.getElementsByTagNameNS("*","sheet")]){
-    const name=sh.getAttribute("name"); const rid=sh.getAttribute("r:id")||sh.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id");
-    const t=wbRels[rid]?.target; if(!t) continue;
-    const sheetPath = t.startsWith("/")? t.slice(1) : "xl/"+t.replace(/^\/?xl\//,"");
-    out[name]={anchors:[],relMap:{},path:sheetPath};
-    const sheetRels = await relsOf(sheetPath.replace(/worksheets\/(sheet\d+\.xml)$/,"worksheets/_rels/$1.rels"));
-    const drawRel = Object.values(sheetRels).find(r=>/\/drawing$/.test(r.type)); if(!drawRel) continue;
-    const drawPath = drawRel.target.startsWith("/")? drawRel.target.slice(1) : "xl/"+drawRel.target.replace(/^\.\.\//,"");
-    const dx = await parse(drawPath); if(!dx) continue;
-    const relMapRaw = await relsOf(drawPath.replace(/drawings\/(drawing\d+\.xml)$/,"drawings/_rels/$1.rels"));
+  const sheets = wbx.match(/<(?:\w+:)?sheet\b[^>]*>/g)||[];
+  for(const sh of sheets){
+    const name=attr(sh,"name"); const rid=attr(sh,"r:id");
+    const t=wbRels[rid]?.target; if(!t){ diag.push(name+": kein Blattpfad"); continue; }
+    const sheetPath = resolve("xl/workbook.xml", t);
+    const sheetRels = await relsOf(sheetPath.replace(/([^\/]+)$/,"_rels/$1.rels"));
+    const drawRel = Object.values(sheetRels).find(r=>/\/drawing$/.test(r.type));
+    if(!drawRel){ out[name]={anchors:[],relMap:{},path:sheetPath}; continue; }
+    const drawPath = resolve(sheetPath, drawRel.target);
+    const dx = await text(drawPath); if(!dx){ diag.push(name+": Zeichnung fehlt"); out[name]={anchors:[],relMap:{},path:sheetPath}; continue; }
+    const relMapRaw = await relsOf(drawPath.replace(/([^\/]+)$/,"_rels/$1.rels"));
     const relMap={}; Object.entries(relMapRaw).forEach(([k,v])=>relMap[k]=v.target);
     const anchors=[];
-    [...dx.getElementsByTagNameNS("*","twoCellAnchor"),...dx.getElementsByTagNameNS("*","oneCellAnchor")].forEach(a=>{
-      const blip=a.getElementsByTagNameNS("*","blip")[0]; if(!blip) return;
-      const rid2=blip.getAttribute("r:embed")||blip.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","embed");
-      const from=a.getElementsByTagNameNS("*","from")[0]; if(!from) return;
-      const row=Number(from.getElementsByTagNameNS("*","row")[0]?.textContent||0), col=Number(from.getElementsByTagNameNS("*","col")[0]?.textContent||0);
-      anchors.push({rid:rid2,row,col});
-    });
+    for(const block of dx.split(/<(?:\w+:)?(?:twoCellAnchor|oneCellAnchor)\b/).slice(1)){
+      const emb = block.match(/r:embed="([^"]*)"/) || block.match(/embed="([^"]*)"/); if(!emb) continue;
+      const from = block.match(/<(?:\w+:)?from>([\s\S]*?)<\/(?:\w+:)?from>/); if(!from) continue;
+      const row = Number((from[1].match(/<(?:\w+:)?row>(\d+)</)||[0,0])[1]), col = Number((from[1].match(/<(?:\w+:)?col>(\d+)</)||[0,0])[1]);
+      anchors.push({rid:emb[1],row,col});
+    }
+    diag.push(name+": "+anchors.length+" Anker, "+Object.keys(relMap).length+" Bildverweise");
     out[name]={anchors,relMap,path:sheetPath};
   }
+  window.__imgDiag=diag;
   return out;
 }
 $("#fileXlsx").addEventListener("change",e=>{ const f=e.target.files[0]; e.target.value=""; if(f) importReport(f); });
