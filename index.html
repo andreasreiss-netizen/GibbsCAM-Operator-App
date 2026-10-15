@@ -569,8 +569,10 @@ async function importReport(file){
         const path = target.startsWith("/") ? target.slice(1) : "xl/"+target.replace(/^\.\.\//,"");
         const f=job.zip.file(path); if(!f) continue;
         const ext=path.split(".").pop().toLowerCase();
-        const mime = ext==="bmp"?"image/bmp": ext==="jpg"||ext==="jpeg"?"image/jpeg": ext==="gif"?"image/gif":"image/png";
-        const blob=new Blob([await f.async("arraybuffer")],{type:mime});
+        const ab = await f.async("arraybuffer");
+        let blob;
+        if(ext==="bmp"){ try{ blob = await bmpToPngBlob(ab); } catch(e){ blob = new Blob([ab],{type:"image/bmp"}); } }
+        else { const mime = ext==="jpg"||ext==="jpeg"?"image/jpeg": ext==="gif"?"image/gif":"image/png"; blob = new Blob([ab],{type:mime}); }
         set[a.col<5?"start":"end"]=URL.createObjectURL(blob);
       }
       if(set.start||set.end){ imageSets[job.opNo]=set; images[job.opNo]=set.end||set.start; imageView[job.opNo]=set.end?"end":"start"; n++; }
@@ -578,6 +580,26 @@ async function importReport(file){
     renderDetail();
     toast(ops.length+" Operationen aus dem Report geladen"+(n? ", "+n+" mit Bild":""));
   }catch(err){ console.error(err); toast("Report konnte nicht gelesen werden: "+err.message); }
+}
+
+// BMP aus dem Report in PNG wandeln. Die Report-Bitmaps sind 32 Bit mit Alpha = 0;
+// iOS zeigt sie deshalb unsichtbar. Hier wird der Alphakanal ignoriert.
+async function bmpToPngBlob(buf){
+  const dv = new DataView(buf);
+  if(dv.getUint8(0)!==0x42 || dv.getUint8(1)!==0x4D) throw new Error("kein BMP");
+  const off = dv.getUint32(10,true), w = dv.getInt32(18,true); let h = dv.getInt32(22,true);
+  const bpp = dv.getUint16(28,true), compr = dv.getUint32(30,true);
+  if(!(bpp===24||bpp===32) || !(compr===0||compr===3)) throw new Error("BMP-Format nicht unterstützt");
+  const topDown = h<0; h = Math.abs(h);
+  const bytes = new Uint8Array(buf);
+  const rowBytes = Math.floor((bpp*w+31)/32)*4;
+  const img = new ImageData(w,h); const px = img.data;
+  for(let y=0;y<h;y++){
+    const srcY = topDown ? y : (h-1-y); let s = off + srcY*rowBytes; let d = y*w*4;
+    for(let x=0;x<w;x++){ px[d]=bytes[s+2]; px[d+1]=bytes[s+1]; px[d+2]=bytes[s]; px[d+3]=255; s += bpp/8; d += 4; }
+  }
+  const cv = document.createElement("canvas"); cv.width=w; cv.height=h; cv.getContext("2d").putImageData(img,0,0);
+  return new Promise((res,rej)=>cv.toBlob(b=>b?res(b):rej(new Error("PNG fehlgeschlagen")),"image/png"));
 }
 
 async function mapSheetDrawings(zip){

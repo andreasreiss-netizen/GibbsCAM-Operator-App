@@ -1,4 +1,4 @@
-# GC_Operator – Shopfloor Companion für GibbsCAM
+# GibbsCAM-Operator-App – Shopfloor Companion für GibbsCAM
 
 Web-App für Bediener an der Maschine: lädt den GibbsCAM-Excel-Report (oder die JSON aus dem
 Export-Makro), zeigt je Operation Werkzeug, Bild, Vorschub und Drehzahl mit zwei Schiebern
@@ -7,7 +7,7 @@ Import-Makro).
 
 ## Nutzung
 
-Web-App: https://andreasreiss-netizen.github.io/GC_Operator/
+Web-App: https://andreasreiss-netizen.github.io/GibbsCAM-Operator-App/
 Auf dem iPhone in Safari öffnen → Teilen → „Zum Home-Bildschirm“ – danach läuft sie wie eine App, auch offline.
 
 ## Inhalt
