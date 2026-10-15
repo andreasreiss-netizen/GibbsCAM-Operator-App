@@ -332,7 +332,7 @@ function renderDetail(){
   el.innerHTML = `
   <article class="card ophead">
     <div class="img" id="imgBox" title="Bild zuordnen">
-      ${img ? `<img src="${img}" alt="Bild zu Operation ${o.opNo}">` : `<div class="ph">${toolSvg()}Bild der Operation hinzufügen<br>(Klick oder Ablegen)</div>`}
+      ${img ? `<img src="${img}" alt="Bild zu Operation ${o.opNo}" onerror="window.__imgErr&&window.__imgErr(${o.opNo})">` : `<div class="ph">${toolSvg()}Bild der Operation hinzufügen<br>(Klick oder Ablegen)</div>`}
       <span class="chg">${img? "Bild ändern":"Bild hinzufügen"}</span>
       ${imageSets[o.opNo] && imageSets[o.opNo].start && imageSets[o.opNo].end ? `<div class="imgtog"><button type="button" data-v="start" class="${(imageView[o.opNo]||"end")==="start"?"on":""}">Vorher</button><button type="button" data-v="end" class="${(imageView[o.opNo]||"end")==="end"?"on":""}">Nachher</button></div>`:""}
     </div>
@@ -436,6 +436,7 @@ function renderSummary(){
 function isChanged(opNo){ const ov=overrides[opNo]; return !!ov && (ov.feedPct!==100 || ov.rpmPct!==100); }
 function fmtTime(s){ if(s==null) return "–"; if(s<90) return fmt(s)+" s"; const m=Math.floor(s/60), r=Math.round(s%60); return m+" min"+(r? " "+r+" s":""); }
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+window.__imgErr = function(opNo){ toast("Bild zu Operation "+opNo+" kann auf diesem Gerät nicht angezeigt werden"); };
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._h); toast._h=setTimeout(()=>t.classList.remove("show"),2600); }
 
 // ---------- Dateien ----------
@@ -571,14 +572,14 @@ async function importReport(file){
         const ext=path.split(".").pop().toLowerCase();
         const ab = await f.async("arraybuffer");
         let blob;
-        if(ext==="bmp"){ try{ blob = await bmpToPngBlob(ab); } catch(e){ blob = new Blob([ab],{type:"image/bmp"}); } }
+        if(ext==="bmp"){ try{ blob = await bmpToPngBlob(ab); window.__bmpOk=(window.__bmpOk||0)+1; } catch(e){ blob = new Blob([ab],{type:"image/bmp"}); window.__bmpErr=(e&&e.message)||"Fehler"; } }
         else { const mime = ext==="jpg"||ext==="jpeg"?"image/jpeg": ext==="gif"?"image/gif":"image/png"; blob = new Blob([ab],{type:mime}); }
         set[a.col<5?"start":"end"]=URL.createObjectURL(blob);
       }
       if(set.start||set.end){ imageSets[job.opNo]=set; images[job.opNo]=set.end||set.start; imageView[job.opNo]=set.end?"end":"start"; n++; }
     }
     renderDetail();
-    toast(ops.length+" Operationen aus dem Report geladen"+(n? ", "+n+" mit Bild":""));
+    toast(ops.length+" Operationen aus dem Report geladen"+(n? ", "+n+" mit Bild":", keine Bilder gefunden")+(window.__bmpErr? " – BMP-Umwandlung fehlgeschlagen: "+window.__bmpErr : (window.__bmpOk? " ("+window.__bmpOk+" Bitmaps umgewandelt)":"")));
   }catch(err){ console.error(err); toast("Report konnte nicht gelesen werden: "+err.message); }
 }
 
