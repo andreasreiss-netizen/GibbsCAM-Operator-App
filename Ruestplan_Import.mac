@@ -6,8 +6,10 @@
 ! Vorschuebe in die Operationen des geoeffneten Teils.
 !
 ! Zeilenformat der Begleitdatei (leerzeichengetrennt, Dezimalpunkt):
-!   OpNr WerkzeugNr Drehzahl Vorschub ProUmdrehung GeaendertRPM GeaendertFeed
-!   3    1          7650     38.25    0            1            1
+!   OpNr WerkzeugNr Drehzahl Vorschub ProUmdrehung GeaendertRPM GeaendertFeed EntryFeed GeaendertEntry
+!   3    1          7650     38.25    0            1            1             28        1
+! (Dateien der alten App-Version ohne die letzten zwei Spalten werden
+!  weiterhin gelesen; Entry Feed bleibt dann unveraendert.)
 !
 ! Sicherheitsregeln:
 !  - Operation muss existieren (sonst uebersprungen)
@@ -78,7 +80,9 @@ log$ = ""
 
 for i = 1 to MAXZEILEN
     iop = -1
-    file_read_vars 1, iop, itool, rpm, feed, perrev, chgrpm, chgfeed
+    efeed = 0
+    chgentry = 0
+    file_read_vars 1, iop, itool, rpm, feed, perrev, chgrpm, chgfeed, efeed, chgentry
     if FileError<>0 then goto fertig
     if iop<1 then goto fertig
     ngesamt = ngesamt + 1
@@ -117,7 +121,7 @@ for i = 1 to MAXZEILEN
     zeile$ = zeile$ + " n: " + rpmalt$ + " -> " + rpm$ + " (gelesen " + rpmneu$ + ")"
 
 :feedwert
-    if chgfeed=0 then goto zeilefertig
+    if chgfeed=0 then goto entrywert
     get_op_data iop, contour_feed, feedalt
     set_op_data iop, contour_feed, feed
     get_op_data iop, contour_feed, feedneu
@@ -125,6 +129,16 @@ for i = 1 to MAXZEILEN
     feedalt$ = trim$(format$(feedalt, "#####0.0###"))
     feedneu$ = trim$(format$(feedneu, "#####0.0###"))
     zeile$ = zeile$ + " f: " + feedalt$ + " -> " + feed$ + " (gelesen " + feedneu$ + ")"
+
+:entrywert
+    if chgentry=0 then goto zeilefertig
+    get_op_data iop, entry_feed, efeedalt
+    set_op_data iop, entry_feed, efeed
+    get_op_data iop, entry_feed, efeedneu
+    efeed$ = trim$(format$(efeed, "#####0.0###"))
+    efeedalt$ = trim$(format$(efeedalt, "#####0.0###"))
+    efeedneu$ = trim$(format$(efeedneu, "#####0.0###"))
+    zeile$ = zeile$ + " fe: " + efeedalt$ + " -> " + efeed$ + " (gelesen " + efeedneu$ + ")"
 
 :zeilefertig
     get_op_data iop, locks, lockalt
