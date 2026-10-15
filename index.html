@@ -123,7 +123,8 @@ main{max-width:1200px;margin:0 auto;padding:20px}
 .meta b{color:var(--ink);font-weight:500}
 
 /* Sliders */
-.sliders{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.sliders{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px}
+@media (max-width:1100px){.sliders{grid-template-columns:1fr 1fr}}
 @media (max-width:760px){.sliders{grid-template-columns:1fr}}
 .slide{padding:20px 22px 18px;display:grid;gap:10px}
 .slide .lbl{display:flex;justify-content:space-between;align-items:baseline;color:var(--ink-2);font-size:14px}
@@ -246,6 +247,7 @@ function normalize(raw){
       toolId: o.toolId,
       rpm: cd.spindleRpm ?? null,
       feed: cd.feedMmMin ?? cd.feed ?? null,
+      entryFeed: cd.entryFeed ?? cd.entryFeedMmMin ?? null,
       feedPerRev: cd.feedUnit ? /\/(U|rev)$/i.test(cd.feedUnit) : false,
       ap: cd.axialDepthMm ?? cd.axialDepth ?? null,
       ae: cd.radialWidthMm ?? cd.radialWidth ?? null,
@@ -326,7 +328,7 @@ function toolSvg(){
 function renderDetail(){
   const o = data.ops[current]; if(!o){ $("#detail").innerHTML=""; return; }
   const t = data.tools[o.toolId] || {id:o.toolId||"–",name:"Werkzeug nicht in Liste",type:"",dia:null,flutes:null,holder:"",vendor:""};
-  const ov = overrides[o.opNo] || {feedPct:100,rpmPct:100};
+  const ov = overrides[o.opNo] || {feedPct:100,rpmPct:100,entryFeedPct:100};
   const img = images[o.opNo];
   const el = $("#detail");
   el.innerHTML = `
@@ -357,6 +359,7 @@ function renderDetail(){
   <div class="sliders">
     ${sliderHtml("feed","Vorschub",o.feed, o.feedPerRev ? data.units+"/U" : data.units+"/min", ov.feedPct)}
     ${sliderHtml("rpm","Drehzahl",o.rpm, "min⁻¹", ov.rpmPct)}
+    ${sliderHtml("entryFeed","Eintauchvorschub (Entry Feed)",o.entryFeed, o.feedPerRev ? data.units+"/U" : data.units+"/min", ov.entryFeedPct ?? 100)}
   </div>
   <article class="card summary" id="summary"></article>`;
 
@@ -369,7 +372,7 @@ function renderDetail(){
   box.addEventListener("drop",e=>{e.preventDefault();box.classList.remove("drag"); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith("image/")) setImage(o.opNo,f);});
 
   // Slider
-  ["feed","rpm"].forEach(k=>wireSlider(k,o,t));
+  ["feed","rpm","entryFeed"].forEach(k=>wireSlider(k,o,t));
   renderSummary();
 }
 
@@ -390,12 +393,12 @@ function sliderHtml(key,label,nominal,unit,pct){
 function wireSlider(key,o,t){
   const rng = $("#rng-"+key); if(!rng) return;
   const update = (pct,commit)=>{
-    const ov = overrides[o.opNo] || {feedPct:100,rpmPct:100};
+    const ov = overrides[o.opNo] || {feedPct:100,rpmPct:100,entryFeedPct:100};
     ov[key+"Pct"] = pct;
-    if(ov.feedPct===100 && ov.rpmPct===100) delete overrides[o.opNo]; else overrides[o.opNo]=ov;
+    if(ov.feedPct===100 && ov.rpmPct===100 && (ov.entryFeedPct??100)===100) delete overrides[o.opNo]; else overrides[o.opNo]=ov;
     const nominal = o[key];
     const val = nominal*pct/100;
-    $("#val-"+key).textContent = fmt(val, (key==="feed" && o.feedPerRev) ? 3 : 0);
+    $("#val-"+key).textContent = fmt(val, ((key==="feed"||key==="entryFeed") && o.feedPerRev) ? 3 : 0);
     $("#pct-"+key).textContent = pct+" %";
     rng.style.setProperty("--fill", ((pct-25)/150*100)+"%");
     $("#sl-"+key).classList.toggle("changed", pct!==100);
@@ -410,7 +413,7 @@ function wireSlider(key,o,t){
 }
 
 function updateDerived(o,t){
-  const ov = overrides[o.opNo] || {feedPct:100,rpmPct:100};
+  const ov = overrides[o.opNo] || {feedPct:100,rpmPct:100,entryFeedPct:100};
   const n = o.rpm!=null ? o.rpm*ov.rpmPct/100 : null;
   const f = o.feed!=null ? o.feed*ov.feedPct/100 : null;
   const isMm = data.units==="mm";
@@ -428,12 +431,12 @@ function renderSummary(){
   const changed = data.ops.filter(o=>isChanged(o.opNo));
   if(!changed.length){ el.innerHTML = `<h3>Änderungen</h3><div class="none">Noch keine Operation geändert. Schieber verschieben, um Vorschub oder Drehzahl anzupassen; Änderungen bleiben auf diesem Gerät gespeichert.</div>`; return; }
   el.innerHTML = `<h3>${changed.length} ${changed.length===1?"Operation":"Operationen"} geändert</h3>
-  <div class="wrap"><table><thead><tr><th>Op</th><th>Name</th><th class="num">Vorschub</th><th class="num">Drehzahl</th></tr></thead><tbody>
-  ${changed.map(o=>{const ov=overrides[o.opNo]; return `<tr><td>${o.opNo}</td><td>${esc(o.name)}</td><td class="num">${ov.feedPct!==100? fmt(o.feed*ov.feedPct/100)+" ("+ov.feedPct+" %)":"–"}</td><td class="num">${ov.rpmPct!==100? fmt(o.rpm*ov.rpmPct/100)+" ("+ov.rpmPct+" %)":"–"}</td></tr>`;}).join("")}
+  <div class="wrap"><table><thead><tr><th>Op</th><th>Name</th><th class="num">Vorschub</th><th class="num">Drehzahl</th><th class="num">Entry Feed</th></tr></thead><tbody>
+  ${changed.map(o=>{const ov=overrides[o.opNo]; return `<tr><td>${o.opNo}</td><td>${esc(o.name)}</td><td class="num">${ov.feedPct!==100? fmt(o.feed*ov.feedPct/100)+" ("+ov.feedPct+" %)":"–"}</td><td class="num">${ov.rpmPct!==100? fmt(o.rpm*ov.rpmPct/100)+" ("+ov.rpmPct+" %)":"–"}</td><td class="num">${(ov.entryFeedPct??100)!==100? fmt(o.entryFeed*ov.entryFeedPct/100)+" ("+ov.entryFeedPct+" %)":"–"}</td></tr>`;}).join("")}
   </tbody></table></div>`;
 }
 
-function isChanged(opNo){ const ov=overrides[opNo]; return !!ov && (ov.feedPct!==100 || ov.rpmPct!==100); }
+function isChanged(opNo){ const ov=overrides[opNo]; return !!ov && (ov.feedPct!==100 || ov.rpmPct!==100 || (ov.entryFeedPct??100)!==100); }
 function fmtTime(s){ if(s==null) return "–"; if(s<90) return fmt(s)+" s"; const m=Math.floor(s/60), r=Math.round(s%60); return m+" min"+(r? " "+r+" s":""); }
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 window.__imgErr = function(opNo){ toast("Bild zu Operation "+opNo+" kann auf diesem Gerät nicht angezeigt werden"); };
@@ -521,7 +524,7 @@ async function importReport(file){
         const otype = cellStr(kv["Op. Type"]);
         ops.push({
           opNo, sheet:sheetName, rowIdx:r,
-          cells:{ rpm: kc["RPM"]||null, feed: kc["Con. Feed"]||kc["Feed/Rev"]||null },
+          cells:{ rpm: kc["RPM"]||null, feed: kc["Con. Feed"]||kc["Feed/Rev"]||null, entryFeed: kc["Entry Feed"]||null },
           toolNumber: toolNo,
           name: (OP_CODES[otype]||otype||"Operation")+(toolNo!=null? " mit T"+toolNo:""),
           type: OP_CODES[otype]||otype,
@@ -647,26 +650,29 @@ $("#fileXlsx").addEventListener("change",e=>{ const f=e.target.files[0]; e.targe
 
 // ---------- Speichern: Report-Kopie (_Op.xlsx) + Begleitdatei für das Makro (_Op.txt) ----------
 function changedRows(all){
-  return data.ops.filter(o=>all || isChanged(o.opNo)).map(o=>{ const ov=overrides[o.opNo]||{feedPct:100,rpmPct:100};
+  return data.ops.filter(o=>all || isChanged(o.opNo)).map(o=>{ const ov=overrides[o.opNo]||{feedPct:100,rpmPct:100,entryFeedPct:100};
     const rpm = o.rpm!=null ? Math.round(o.rpm*ov.rpmPct/100) : null;
     const feed = o.feed!=null ? (o.feedPerRev ? Math.round(o.feed*ov.feedPct/100*10000)/10000 : Math.round(o.feed*ov.feedPct/100*100)/100) : null;
-    return {op:o, rpm, feed};
+    const ePct = ov.entryFeedPct ?? 100;
+    const entryFeed = o.entryFeed!=null ? (o.feedPerRev ? Math.round(o.entryFeed*ePct/100*10000)/10000 : Math.round(o.entryFeed*ePct/100*100)/100) : null;
+    return {op:o, rpm, feed, entryFeed};
   });
 }
 function buildTxt(rows){
   // Eine Zeile je Operation, leerzeichengetrennt, Dezimalpunkt:
-  // OpNr WerkzeugNr Drehzahl Vorschub VorschubProUmdrehung(0/1) GeändertRPM(0/1) GeändertFeed(0/1)
-  return rows.map(r=>{ const ov=overrides[r.op.opNo]||{feedPct:100,rpmPct:100};
-    return [r.op.opNo, r.op.toolNumber ?? (r.op.toolId? String(r.op.toolId).replace(/^T/,"") : 0), r.rpm ?? 0, r.feed ?? 0, r.op.feedPerRev?1:0, ov.rpmPct!==100?1:0, ov.feedPct!==100?1:0].join(" ");
+  // OpNr WerkzeugNr Drehzahl Vorschub VorschubProUmdrehung(0/1) GeändertRPM(0/1) GeändertFeed(0/1) EntryFeed GeändertEntry(0/1)
+  return rows.map(r=>{ const ov=overrides[r.op.opNo]||{feedPct:100,rpmPct:100,entryFeedPct:100};
+    return [r.op.opNo, r.op.toolNumber ?? (r.op.toolId? String(r.op.toolId).replace(/^T/,"") : 0), r.rpm ?? 0, r.feed ?? 0, r.op.feedPerRev?1:0, ov.rpmPct!==100?1:0, ov.feedPct!==100?1:0, r.entryFeed ?? 0, (ov.entryFeedPct??100)!==100?1:0].join(" ");
   }).join("\r\n")+"\r\n";
 }
 async function buildXlsxCopy(rows){
   const zip = await JSZip.loadAsync(reportBuf);
   const bySheet = {};
-  rows.forEach(r=>{ const ov=overrides[r.op.opNo]||{feedPct:100,rpmPct:100}; if(!r.op.cells) return; const p=sheetPaths[r.op.sheet]; if(!p) return;
+  rows.forEach(r=>{ const ov=overrides[r.op.opNo]||{feedPct:100,rpmPct:100,entryFeedPct:100}; if(!r.op.cells) return; const p=sheetPaths[r.op.sheet]; if(!p) return;
     (bySheet[p] ||= []);
     if(ov.rpmPct!==100 && r.op.cells.rpm && r.rpm!=null) bySheet[p].push({addr:r.op.cells.rpm, val:r.rpm});
     if(ov.feedPct!==100 && r.op.cells.feed && r.feed!=null) bySheet[p].push({addr:r.op.cells.feed, val:r.feed});
+    if((ov.entryFeedPct??100)!==100 && r.op.cells.entryFeed && r.entryFeed!=null) bySheet[p].push({addr:r.op.cells.entryFeed, val:r.entryFeed});
   });
   for(const [p,edits] of Object.entries(bySheet)){
     let xml = await zip.file(p).async("string");
@@ -715,7 +721,8 @@ async function exportChanges(){
     overrides: data.ops.filter(o=>isChanged(o.opNo)).map(o=>{const ov=overrides[o.opNo]; return {
       opNo:o.opNo, name:o.name, toolId:o.toolId,
       feed:{programmed:o.feed, percent:ov.feedPct, actual:o.feed!=null? Math.round(o.feed*ov.feedPct/100):null},
-      rpm:{programmed:o.rpm, percent:ov.rpmPct, actual:o.rpm!=null? Math.round(o.rpm*ov.rpmPct/100):null}
+      rpm:{programmed:o.rpm, percent:ov.rpmPct, actual:o.rpm!=null? Math.round(o.rpm*ov.rpmPct/100):null},
+      entryFeed:{programmed:o.entryFeed, percent:ov.entryFeedPct??100, actual:o.entryFeed!=null? Math.round(o.entryFeed*(ov.entryFeedPct??100)/100):null}
     };})
   };
   const text = JSON.stringify(out,null,2);
