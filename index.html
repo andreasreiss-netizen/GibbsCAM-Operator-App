@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shopfloor Companion</title>
+<meta name="theme-color" content="#1F5FD6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Shopfloor">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#EDF0F3; --surface:#FFFFFF; --surface-2:#F6F8FA; --line:#CBD3DB; --line-strong:#9AA6B2;
+  --ink:#141E28; --ink-2:#4A5967; --ink-3:#7A8794;
+  --accent:#1F5FD6; --accent-ink:#FFFFFF; --accent-soft:#E3ECFB;
+  --change:#D99A00; --change-soft:#FFF3D1; --danger:#C8371C;
+  --radius:10px; --radius-s:6px;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0F151B; --surface:#171F27; --surface-2:#1E2831; --line:#2B3741; --line-strong:#465461;
+    --ink:#EDF2F6; --ink-2:#AEBBC7; --ink-3:#7C8A97;
+    --accent:#5A8FF0; --accent-ink:#0C1420; --accent-soft:#1A2B47;
+    --change:#F0B429; --change-soft:#3A2E0E; --danger:#F06B50;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F151B; --surface:#171F27; --surface-2:#1E2831; --line:#2B3741; --line-strong:#465461;
+  --ink:#EDF2F6; --ink-2:#AEBBC7; --ink-3:#7C8A97;
+  --accent:#5A8FF0; --accent-ink:#0C1420; --accent-soft:#1A2B47;
+  --change:#F0B429; --change-soft:#3A2E0E; --danger:#F06B50;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.45;font-variant-numeric:tabular-nums;}
+*,*::before,*::after{box-sizing:inherit}
+button{font:inherit;color:inherit;cursor:pointer}
+input[type=file]{display:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--surface);z-index:10}
+header h1{font-size:17px;font-weight:600;margin:0;letter-spacing:-.01em}
+header .prog{color:var(--ink-2);font-size:14px}
+header .spacer{flex:1}
+.btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:var(--radius-s);padding:8px 14px;font-weight:500;font-size:14px}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.quiet{border-color:transparent;color:var(--ink-2)}
+.btn[disabled]{opacity:.45;cursor:default}
+
+main{max-width:1200px;margin:0 auto;padding:20px}
+
+/* Empty state */
+.empty{max-width:640px;margin:48px auto;background:var(--surface);border:1px dashed var(--line-strong);border-radius:var(--radius);padding:40px 32px;text-align:center}
+.empty.drag{border-color:var(--accent);background:var(--accent-soft)}
+.empty h2{font-size:22px;font-weight:600;margin:0 0 8px}
+.empty p{color:var(--ink-2);margin:0 0 20px;max-width:46ch;margin-inline:auto}
+.empty .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+/* Layout */
+.layout{display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:1fr}}
+
+/* Operation list */
+.oplist{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.oplist h2{font-size:13px;font-weight:500;color:var(--ink-2);margin:0;padding:12px 16px;border-bottom:1px solid var(--line)}
+.oplist ol{list-style:none;margin:0;padding:0;max-height:70vh;overflow:auto}
+.oplist li{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.oplist li:last-child{border-bottom:none}
+.oplist li:hover{background:var(--surface-2)}
+.oplist li[aria-current="true"]{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.oplist .no{font-weight:600;color:var(--ink-2);font-size:14px}
+.oplist .nm{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oplist .tl{font-size:13px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oplist .dot{width:9px;height:9px;border-radius:50%;background:var(--change);visibility:hidden}
+.oplist li.changed .dot{visibility:visible}
+@media (max-width:860px){
+  .oplist ol{display:flex;overflow-x:auto;max-height:none}
+  .oplist li{min-width:200px;border-bottom:none;border-right:1px solid var(--line)}
+  .oplist li[aria-current="true"]{box-shadow:inset 0 -3px 0 var(--accent)}
+}
+
+/* Detail */
+.detail{display:grid;gap:20px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+.ophead{display:grid;grid-template-columns:minmax(220px,340px) 1fr;gap:0}
+@media (max-width:640px){.ophead{grid-template-columns:1fr}}
+.img{position:relative;aspect-ratio:4/3;background:var(--surface-2);border-right:1px solid var(--line);border-radius:var(--radius) 0 0 var(--radius);display:grid;place-items:center;overflow:hidden;cursor:pointer}
+@media (max-width:640px){.img{border-right:none;border-bottom:1px solid var(--line);border-radius:var(--radius) var(--radius) 0 0}}
+.img img{width:100%;height:100%;object-fit:cover;display:block}
+.img .ph{color:var(--ink-3);font-size:13px;text-align:center;padding:16px}
+.img .ph svg{display:block;margin:0 auto 10px;width:56px;height:56px}
+.img.drag{outline:2px dashed var(--accent);outline-offset:-6px}
+.imgtog{position:absolute;left:8px;bottom:8px;display:flex;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:2px}
+.imgtog button{border:none;background:transparent;border-radius:999px;padding:3px 10px;font-size:12px;color:var(--ink-2)}
+.imgtog button.on{background:var(--accent);color:var(--accent-ink)}
+.img .chg{position:absolute;right:8px;bottom:8px;font-size:12px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px 9px;opacity:0;transition:opacity .15s}
+.img:hover .chg{opacity:1}
+.opinfo{padding:20px 24px;display:grid;gap:14px;align-content:start}
+.opinfo .step{color:var(--ink-2);font-size:14px}
+.opinfo h2{margin:0;font-size:26px;font-weight:600;letter-spacing:-.015em;line-height:1.15}
+.tool{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:12px 14px;background:var(--surface-2);border-radius:var(--radius-s)}
+.tool .tno{font-weight:600;font-size:20px;background:var(--ink);color:var(--surface);border-radius:var(--radius-s);padding:6px 10px;min-width:52px;text-align:center}
+.tool .tnm{font-weight:500}
+.tool .tsp{font-size:13px;color:var(--ink-2)}
+.meta{display:flex;gap:18px;flex-wrap:wrap;font-size:14px;color:var(--ink-2)}
+.meta b{color:var(--ink);font-weight:500}
+
+/* Sliders */
+.sliders{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:760px){.sliders{grid-template-columns:1fr}}
+.slide{padding:20px 22px 18px;display:grid;gap:10px}
+.slide .lbl{display:flex;justify-content:space-between;align-items:baseline;color:var(--ink-2);font-size:14px}
+.slide .val{display:flex;align-items:baseline;gap:8px}
+.slide .val .n{font-size:44px;font-weight:600;letter-spacing:-.03em;line-height:1}
+.slide .val .u{font-size:16px;color:var(--ink-2)}
+.slide .pct{font-size:15px;font-weight:500;padding:3px 9px;border-radius:999px;background:var(--surface-2);color:var(--ink-2)}
+.slide.changed .pct{background:var(--change-soft);color:var(--change)}
+.slide .nom{font-size:13px;color:var(--ink-3)}
+.slide .derived{font-size:13px;color:var(--ink-2)}
+.slide .foot{display:flex;justify-content:space-between;align-items:center;gap:8px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:44px;background:transparent;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:4px;background:linear-gradient(to right,var(--accent) 0 var(--fill,50%),var(--line) var(--fill,50%) 100%)}
+input[type=range]::-moz-range-track{height:8px;border-radius:4px;background:var(--line)}
+input[type=range]::-moz-range-progress{height:8px;border-radius:4px;background:var(--accent)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:50%;background:var(--surface);border:3px solid var(--accent);margin-top:-11px;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:var(--surface);border:3px solid var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.slide.changed input[type=range]::-webkit-slider-thumb{border-color:var(--change)}
+.slide.changed input[type=range]::-moz-range-thumb{border-color:var(--change)}
+.slide.changed input[type=range]::-webkit-slider-runnable-track{background:linear-gradient(to right,var(--change) 0 var(--fill,50%),var(--line) var(--fill,50%) 100%)}
+.slide.changed input[type=range]::-moz-range-progress{background:var(--change)}
+.ticks{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3);margin-top:-6px}
+
+/* Changes summary */
+.summary{padding:16px 22px;display:grid;gap:10px}
+.summary h3{margin:0;font-size:15px;font-weight:600}
+.summary table{width:100%;border-collapse:collapse;font-size:14px}
+.summary th,.summary td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+.summary th{font-weight:500;color:var(--ink-2)}
+.summary td.num,.summary th.num{text-align:right}
+.summary .none{color:var(--ink-3);font-size:14px}
+.wrap{overflow-x:auto}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:var(--radius-s);font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Shopfloor Companion</h1>
+  <span class="prog" id="progLabel"></span>
+  <span class="spacer"></span>
+  <button class="btn quiet" id="btnLoad">Export laden</button>
+  <button class="btn quiet" id="btnImgs" disabled>Bilder zuordnen</button>
+  <button class="btn quiet" id="btnXlsx">Report laden</button>
+  <button class="btn quiet" id="btnReset" disabled>Alle zurücksetzen</button>
+  <button class="btn quiet" id="btnExport" disabled>JSON exportieren</button>
+  <button class="btn primary" id="btnSave" disabled>Speichern</button>
+  <input type="file" id="fileJson" accept=".json,application/json">
+  <input type="file" id="fileImg" accept="image/*">
+  <input type="file" id="fileImgs" accept="image/*" multiple>
+  <input type="file" id="fileXlsx" accept=".xlsx">
+</header>
+
+<main id="app"></main>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+// ---------- Zustand ----------
+let data = null;        // normalisierter Export
+let current = 0;        // Index der gewählten Operation
+let overrides = {};     // opNo -> {feedPct, rpmPct}
+let images = {};        // opNo -> objectURL (nur Sitzung)
+let imageSets = {};     // opNo -> {start,end} aus dem Report
+let imageView = {};     // opNo -> "start" | "end"
+let jsonTools = null;   // Werkzeugnamen aus einem zuvor geladenen Makro-Export
+let reportBuf = null;   // Original-Report als ArrayBuffer (für die Kopie)
+let reportName = "";    // Dateiname des Reports
+let sheetPaths = {};    // Blattname -> Pfad im xlsx-Paket
+let downloads = null;   // Artifact-Capability (optional)
+
+const TOOL_TYPE_NAMES = {end_mill:"Schaftfräser",ball_mill:"Kugelfräser",bull_nose:"Torusfräser",face_mill:"Planfräser",drill:"Bohrer",center_drill:"Zentrierbohrer",spot_drill:"Anbohrer",tap:"Gewindebohrer",reamer:"Reibahle",boring_bar:"Bohrstange",turning:"Drehmeißel",grooving:"Stechmeißel",threading:"Gewindedrehen",probe:"Messtaster",other:"Werkzeug"};
+const OP_TYPE_NAMES = {roughing:"Schruppen",finishing:"Schlichten",drilling:"Bohren",tapping:"Gewindebohren",reaming:"Reiben",boring:"Ausspindeln",contouring:"Konturfräsen",facing:"Planen",threading:"Gewinde",grooving:"Einstechen",parting:"Abstechen",probing:"Messen",other:""};
+const COOLANT_NAMES = {flood:"Emulsion",through_tool:"Innenkühlung",mist:"Minimalmenge",air:"Luft",none:"ohne"};
+
+const $ = (s,el=document)=>el.querySelector(s);
+const app = $("#app");
+const fmt = (n,d=0)=> (n==null||isNaN(n)) ? "–" : Number(n).toLocaleString("de-DE",{minimumFractionDigits:d,maximumFractionDigits:d});
+
+// ---------- Laden & Normalisieren ----------
+function parseExport(text){
+  // Makro-Export nutzt ~ als Platzhalter für das Anführungszeichen
+  let t = text.trim();
+  if(!/^\s*\{\s*"/.test(t)) t = t.replace(/~/g,'"');
+  // Windows-Pfade aus dem Makro enthalten unmaskierte Backslashes (C:\Users\...):
+  // jeden Backslash maskieren, der kein gültiges JSON-Escape einleitet
+  t = t.replace(/\\(?!["\\\/bfnrtu])/g, "\\\\");
+  const raw = JSON.parse(t);
+  return normalize(raw);
+}
+
+function normalize(raw){
+  const tools = {};
+  (raw.tools||[]).forEach(t=>{
+    const id = t.toolId || ("T"+t.toolNumber);
+    tools[id] = {
+      id, number: t.toolNumber,
+      name: t.name || (TOOL_TYPE_NAMES[t.toolType]||"Werkzeug")+(t.diameterMm||t.diameter ? " D"+(t.diameterMm||t.diameter):""),
+      type: t.toolType ? (TOOL_TYPE_NAMES[t.toolType]||t.toolType) : (t.gibbsToolType!=null ? "GibbsCAM-Typ "+t.gibbsToolType : ""),
+      dia: t.diameterMm ?? t.diameter ?? null,
+      flutes: t.fluteCount ?? null,
+      holder: t.holder?.name || "",
+      vendor: t.vendor ? [t.vendor.manufacturer,t.vendor.orderNumber].filter(Boolean).join(" ") : "",
+      lenReg: t.offsets?.lengthRegister ?? null,
+      radReg: t.offsets?.radiusRegister ?? null
+    };
+  });
+  const ops = (raw.operations||[]).map((o,i)=>{
+    const cd = o.cuttingData||{};
+    return {
+      opNo: o.opNo ?? (i+1),
+      name: o.name || ("Operation "+(o.opNo ?? (i+1))),
+      type: o.operationType ? (OP_TYPE_NAMES[o.operationType]||o.operationType) : (o.gibbsMillType!=null ? "Typ "+o.gibbsMillType : ""),
+      toolId: o.toolId,
+      rpm: cd.spindleRpm ?? null,
+      feed: cd.feedMmMin ?? cd.feed ?? null,
+      feedPerRev: cd.feedUnit ? /\/(U|rev)$/i.test(cd.feedUnit) : false,
+      ap: cd.axialDepthMm ?? cd.axialDepth ?? null,
+      ae: cd.radialWidthMm ?? cd.radialWidth ?? null,
+      coolant: cd.coolant ? (COOLANT_NAMES[cd.coolant]||cd.coolant) : (cd.gibbsCoolant!=null ? "Code "+cd.gibbsCoolant : ""),
+      timeSec: o.estimatedTimeSec ?? o.estimatedTime ?? null,
+      cs: o.csNumber ?? o.setupNo ?? null,
+      notes: o.notes || ""
+    };
+  });
+  const p = raw.program||{};
+  return { programId: p.programId||p.name||"Programm", name: p.name||p.programId||"Programm", revision: p.revision||"", material: p.material?.name||"", units: p.units||"mm", tools, ops, raw };
+}
+
+function storageKey(){ return "sfc:"+(data?.programId||"x"); }
+function loadOverrides(){ try{ const s=localStorage.getItem(storageKey()); overrides = s?JSON.parse(s):{}; }catch(e){ overrides={}; } }
+function saveOverrides(){ try{ localStorage.setItem(storageKey(), JSON.stringify(overrides)); }catch(e){} }
+
+function setData(d){
+  data = d; current = 0; images = {};
+  loadOverrides();
+  $("#progLabel").textContent = data.name + (data.revision? " · Rev. "+data.revision:"") + (data.material? " · "+data.material:"");
+  render();
+}
+
+// ---------- Rendering ----------
+function render(){
+  if(!data){ renderEmpty(); return; }
+  $("#btnReset").disabled = false;
+  $("#btnExport").disabled = false;
+  $("#btnSave").disabled = false;
+  $("#btnImgs").disabled = false;
+  app.innerHTML = `
+  <div class="layout">
+    <nav class="oplist" aria-label="Operationen">
+      <h2>${data.ops.length} Operationen in NC-Reihenfolge</h2>
+      <ol id="oplist"></ol>
+    </nav>
+    <section class="detail" id="detail"></section>
+  </div>`;
+  renderList();
+  renderDetail();
+}
+
+function renderEmpty(){
+  $("#progLabel").textContent = "";
+  $("#btnReset").disabled = true; $("#btnExport").disabled = true; $("#btnSave").disabled = true;
+  $("#btnImgs").disabled = true;
+  app.innerHTML = `
+  <div class="empty" id="drop">
+    <h2>Rüstplan laden</h2>
+    <p>Lade den Excel-Report aus dem GibbsCAM-Reporter (mit Bildern) oder die JSON-Datei aus dem Makro. Ziehen und Ablegen funktioniert für beide.</p>
+    <div class="row">
+      <button class="btn primary" id="btnPick">Datei auswählen</button>
+      <button class="btn" id="btnReport">Report (.xlsx) laden</button>
+      <button class="btn" id="btnDemo">Beispiel ansehen</button>
+    </div>
+  </div>`;
+  $("#btnPick").onclick = ()=>$("#fileJson").click();
+  $("#btnReport").onclick = ()=>$("#fileXlsx").click();
+  $("#btnDemo").onclick = ()=>setData(normalize(DEMO));
+  const drop = $("#drop");
+  drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("drag");});
+  drop.addEventListener("dragleave",()=>drop.classList.remove("drag"));
+  drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("drag"); const f=e.dataTransfer.files[0]; if(f){ /\.xlsx$/i.test(f.name) ? importReport(f) : readJson(f); }});
+}
+
+function renderList(){
+  const ol = $("#oplist"); ol.innerHTML = "";
+  data.ops.forEach((o,i)=>{
+    const t = data.tools[o.toolId];
+    const li = document.createElement("li");
+    li.setAttribute("aria-current", i===current ? "true":"false");
+    li.className = isChanged(o.opNo) ? "changed":"";
+    li.innerHTML = `<span class="no">${o.opNo}</span><span><div class="nm">${esc(o.name)}</div><div class="tl">${t? esc(t.id+" · "+t.name) : esc(o.toolId||"")}</div></span><span class="dot" title="geändert"></span>`;
+    li.onclick = ()=>{ current=i; renderList(); renderDetail(); };
+    ol.appendChild(li);
+  });
+}
+
+function toolSvg(){
+  return `<svg viewBox="0 0 56 56" fill="none" stroke="currentColor" stroke-width="2"><rect x="22" y="4" width="12" height="18" rx="2"/><path d="M24 22v26l4 4 4-4V22"/><path d="M24 30h8M24 38h8M24 46h8"/></svg>`;
+}
+
+function renderDetail(){
+  const o = data.ops[current]; if(!o){ $("#detail").innerHTML=""; return; }
+  const t = data.tools[o.toolId] || {id:o.toolId||"–",name:"Werkzeug nicht in Liste",type:"",dia:null,flutes:null,holder:"",vendor:""};
+  const ov = overrides[o.opNo] || {feedPct:100,rpmPct:100};
+  const img = images[o.opNo];
+  const el = $("#detail");
+  el.innerHTML = `
+  <article class="card ophead">
+    <div class="img" id="imgBox" title="Bild zuordnen">
+      ${img ? `<img src="${img}" alt="Bild zu Operation ${o.opNo}">` : `<div class="ph">${toolSvg()}Bild der Operation hinzufügen<br>(Klick oder Ablegen)</div>`}
+      <span class="chg">${img? "Bild ändern":"Bild hinzufügen"}</span>
+      ${imageSets[o.opNo] && imageSets[o.opNo].start && imageSets[o.opNo].end ? `<div class="imgtog"><button type="button" data-v="start" class="${(imageView[o.opNo]||"end")==="start"?"on":""}">Vorher</button><button type="button" data-v="end" class="${(imageView[o.opNo]||"end")==="end"?"on":""}">Nachher</button></div>`:""}
+    </div>
+    <div class="opinfo">
+      <div class="step">Operation ${o.opNo} von ${data.ops.length}${o.type? " · "+esc(o.type):""}${o.cs!=null? " · Koordinatensystem "+o.cs:""}</div>
+      <h2>${esc(o.name)}</h2>
+      <div class="tool">
+        <div class="tno">${esc(t.id)}</div>
+        <div><div class="tnm">${esc(t.name)}</div><div class="tsp">${[t.type, t.dia!=null? "Ø "+fmt(t.dia,2)+" "+data.units:"", t.flutes? "z = "+t.flutes:"", t.holder, t.vendor].filter(Boolean).map(esc).join(" · ")}</div></div>
+      </div>
+      <div class="meta">
+        ${o.ap!=null? `<span>ap <b>${fmt(o.ap,2)} ${data.units}</b></span>`:""}
+        ${o.ae!=null? `<span>ae <b>${fmt(o.ae,2)} ${data.units}</b></span>`:""}
+        ${o.coolant? `<span>Kühlung <b>${esc(o.coolant)}</b></span>`:""}
+        ${o.timeSec!=null? `<span>Zeit <b>${fmtTime(o.timeSec)}</b></span>`:""}
+        ${t.lenReg!=null? `<span>Länge <b>H${t.lenReg}</b></span>`:""}
+        ${t.radReg!=null? `<span>Radius <b>D${t.radReg}</b></span>`:""}
+      </div>
+      ${o.notes? `<div class="meta"><span>Hinweis: <b>${esc(o.notes)}</b></span></div>`:""}
+    </div>
+  </article>
+  <div class="sliders">
+    ${sliderHtml("feed","Vorschub",o.feed, o.feedPerRev ? data.units+"/U" : data.units+"/min", ov.feedPct)}
+    ${sliderHtml("rpm","Drehzahl",o.rpm, "min⁻¹", ov.rpmPct)}
+  </div>
+  <article class="card summary" id="summary"></article>`;
+
+  // Bild
+  const box = $("#imgBox");
+  box.onclick = ()=>$("#fileImg").click();
+  box.querySelectorAll(".imgtog button").forEach(b=>b.onclick=(ev)=>{ ev.stopPropagation(); imageView[o.opNo]=b.dataset.v; images[o.opNo]=imageSets[o.opNo][b.dataset.v]; renderDetail(); });
+  box.addEventListener("dragover",e=>{e.preventDefault();box.classList.add("drag");});
+  box.addEventListener("dragleave",()=>box.classList.remove("drag"));
+  box.addEventListener("drop",e=>{e.preventDefault();box.classList.remove("drag"); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith("image/")) setImage(o.opNo,f);});
+
+  // Slider
+  ["feed","rpm"].forEach(k=>wireSlider(k,o,t));
+  renderSummary();
+}
+
+function sliderHtml(key,label,nominal,unit,pct){
+  const has = nominal!=null && nominal>0;
+  const val = has ? nominal*pct/100 : null;
+  return `
+  <article class="card slide ${pct!==100?"changed":""}" id="sl-${key}">
+    <div class="lbl"><span>${label}</span><span class="pct" id="pct-${key}">${pct} %</span></div>
+    <div class="val"><span class="n" id="val-${key}">${has? fmt(val, /\/U$/.test(unit)?3:0):"–"}</span><span class="u">${unit}</span></div>
+    <div class="nom" id="nom-${key}">${has? "Programmiert: "+fmt(nominal, /\/U$/.test(unit)?3:0)+" "+unit : "Kein Wert im Export"}</div>
+    <input type="range" id="rng-${key}" min="25" max="175" step="1" value="${pct}" ${has?"":"disabled"} aria-label="${label} in Prozent des programmierten Werts" style="--fill:${(pct-25)/150*100}%">
+    <div class="ticks"><span>25 %</span><span>100 %</span><span>175 %</span></div>
+    <div class="foot"><span class="derived" id="der-${key}"></span><button class="btn quiet" id="rst-${key}" ${pct===100?"disabled":""}>Zurücksetzen</button></div>
+  </article>`;
+}
+
+function wireSlider(key,o,t){
+  const rng = $("#rng-"+key); if(!rng) return;
+  const update = (pct,commit)=>{
+    const ov = overrides[o.opNo] || {feedPct:100,rpmPct:100};
+    ov[key+"Pct"] = pct;
+    if(ov.feedPct===100 && ov.rpmPct===100) delete overrides[o.opNo]; else overrides[o.opNo]=ov;
+    const nominal = o[key];
+    const val = nominal*pct/100;
+    $("#val-"+key).textContent = fmt(val, (key==="feed" && o.feedPerRev) ? 3 : 0);
+    $("#pct-"+key).textContent = pct+" %";
+    rng.style.setProperty("--fill", ((pct-25)/150*100)+"%");
+    $("#sl-"+key).classList.toggle("changed", pct!==100);
+    $("#rst-"+key).disabled = pct===100;
+    updateDerived(o,t);
+    if(commit){ saveOverrides(); renderList(); renderSummary(); }
+  };
+  rng.addEventListener("input", e=>update(Number(e.target.value), false));
+  rng.addEventListener("change", e=>update(Number(e.target.value), true));
+  $("#rst-"+key).onclick = ()=>{ rng.value=100; update(100,true); };
+  updateDerived(o,t);
+}
+
+function updateDerived(o,t){
+  const ov = overrides[o.opNo] || {feedPct:100,rpmPct:100};
+  const n = o.rpm!=null ? o.rpm*ov.rpmPct/100 : null;
+  const f = o.feed!=null ? o.feed*ov.feedPct/100 : null;
+  const isMm = data.units==="mm";
+  let rpmTxt="", feedTxt="";
+  if(n && t.dia){ const vc = Math.PI*t.dia*n/(isMm?1000:12); rpmTxt = "vc ≈ "+fmt(vc, isMm?0:0)+(isMm?" m/min":" ft/min"); }
+  if(o.feedPerRev){ if(f && n) feedTxt = "entspricht "+fmt(f*n)+" "+data.units+"/min"; }
+  else if(f && n && t.flutes){ const fz = f/(n*t.flutes); feedTxt = "fz ≈ "+fmt(fz,3)+" "+data.units; }
+  else if(f && n){ const fu = f/n; feedTxt = "f ≈ "+fmt(fu,3)+" "+data.units+"/U"; }
+  const dr=$("#der-rpm"), df=$("#der-feed");
+  if(dr) dr.textContent = rpmTxt; if(df) df.textContent = feedTxt;
+}
+
+function renderSummary(){
+  const el = $("#summary"); if(!el) return;
+  const changed = data.ops.filter(o=>isChanged(o.opNo));
+  if(!changed.length){ el.innerHTML = `<h3>Änderungen</h3><div class="none">Noch keine Operation geändert. Schieber verschieben, um Vorschub oder Drehzahl anzupassen; Änderungen bleiben auf diesem Gerät gespeichert.</div>`; return; }
+  el.innerHTML = `<h3>${changed.length} ${changed.length===1?"Operation":"Operationen"} geändert</h3>
+  <div class="wrap"><table><thead><tr><th>Op</th><th>Name</th><th class="num">Vorschub</th><th class="num">Drehzahl</th></tr></thead><tbody>
+  ${changed.map(o=>{const ov=overrides[o.opNo]; return `<tr><td>${o.opNo}</td><td>${esc(o.name)}</td><td class="num">${ov.feedPct!==100? fmt(o.feed*ov.feedPct/100)+" ("+ov.feedPct+" %)":"–"}</td><td class="num">${ov.rpmPct!==100? fmt(o.rpm*ov.rpmPct/100)+" ("+ov.rpmPct+" %)":"–"}</td></tr>`;}).join("")}
+  </tbody></table></div>`;
+}
+
+function isChanged(opNo){ const ov=overrides[opNo]; return !!ov && (ov.feedPct!==100 || ov.rpmPct!==100); }
+function fmtTime(s){ if(s==null) return "–"; if(s<90) return fmt(s)+" s"; const m=Math.floor(s/60), r=Math.round(s%60); return m+" min"+(r? " "+r+" s":""); }
+function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._h); toast._h=setTimeout(()=>t.classList.remove("show"),2600); }
+
+// ---------- Dateien ----------
+function readJson(file){
+  const r = new FileReader();
+  r.onload = ()=>{ try{ const d=parseExport(r.result); jsonTools=d.tools; setData(d); toast("Export geladen: "+file.name); } catch(e){ toast("Datei konnte nicht gelesen werden: "+e.message); } };
+  r.readAsText(file);
+}
+function setImage(opNo,file){
+  if(images[opNo]) URL.revokeObjectURL(images[opNo]);
+  images[opNo] = URL.createObjectURL(file);
+  renderDetail();
+}
+$("#fileJson").addEventListener("change",e=>{ const f=e.target.files[0]; if(f) readJson(f); e.target.value=""; });
+$("#fileImg").addEventListener("change",e=>{ const f=e.target.files[0]; if(f&&data) setImage(data.ops[current].opNo,f); e.target.value=""; });
+$("#btnLoad").onclick = ()=>$("#fileJson").click();
+$("#btnImgs").onclick = ()=>$("#fileImgs").click();
+$("#btnXlsx").onclick = ()=>$("#fileXlsx").click();
+
+// Mehrere Bilder: Zuordnung ueber die Zahl im Dateinamen (Op6.png, op_06.jpg, 6.png)
+$("#fileImgs").addEventListener("change",e=>{
+  const files=[...e.target.files]; e.target.value=""; if(!files.length||!data) return;
+  if(files.length===1){ setImage(data.ops[current].opNo, files[0]); return; }
+  let hit=0, miss=[];
+  files.forEach(f=>{
+    const m=f.name.replace(/\.[^.]+$/,"").match(/(\d+)(?!.*\d)/);
+    const op = m ? data.ops.find(o=>o.opNo===Number(m[1])) : null;
+    if(op){ if(images[op.opNo]) URL.revokeObjectURL(images[op.opNo]); images[op.opNo]=URL.createObjectURL(f); hit++; } else miss.push(f.name);
+  });
+  renderDetail();
+  toast(hit+" Bilder zugeordnet"+(miss.length? ", nicht erkannt: "+miss.join(", "):""));
+});
+
+// ---------- GibbsCAM-Report (.xlsx) direkt laden ----------
+// Aufbau des Standard-Reports: je Operation ein Block von 8 Zeilen mit
+// Beschriftung/Wert-Paaren (Operation, Tool #, RPM, Con. Feed, ...),
+// links das Bild "Start Condition", rechts "End Condition".
+const TOOL_CODES = {REM:"Schruppfräser",FEM:"Schlichtfräser",EM:"Schaftfräser",BEM:"Kugelfräser",BUL:"Torusfräser",FM:"Planfräser",DR:"Bohrer",DRL:"Bohrer",CD:"Zentrierbohrer",SD:"Anbohrer",TAP:"Gewindebohrer",RM:"Reibahle",BOR:"Bohrstange",CS:"Senker",CB:"Zapfensenker",TM:"Gewindefräser",CH:"Fasenfräser",KEY:"Scheibenfräser",LOL:"Lollipop-Fräser",PRB:"Messtaster"};
+const OP_CODES = {Rough:"Schruppen",Finish:"Schlichten",Drill:"Bohren",Tap:"Gewindebohren",Ream:"Reiben",Bore:"Ausspindeln",Contour:"Konturfräsen",Face:"Planen",Pocket:"Taschenfräsen",Thread:"Gewinde",Probe:"Messen"};
+
+function cellStr(v){ return v==null? "" : String(v).trim(); }
+function num(v){ const n = typeof v==="number"? v : parseFloat(String(v).replace(",",".")); return isNaN(n)? null : n; }
+function excelTimeToSec(v){ if(v==null) return null; if(typeof v==="number") return Math.round((v%1)*86400); const m=String(v).match(/(\d+):(\d+):(\d+)/); return m? (+m[1])*3600+(+m[2])*60+(+m[3]) : null; }
+
+async function importReport(file){
+  if(!window.XLSX || !window.JSZip){ toast("Excel-Leser konnte nicht geladen werden"); return; }
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf,{type:"array"});
+    const zip = await JSZip.loadAsync(buf);
+
+    // Blätter -> Zeichnungen (für die Bilder)
+    const sheetDrawings = await mapSheetDrawings(zip);
+
+    let program = {partFile:"",units:"inch",runTimeSec:null,user:""};
+    const ops = []; const toolsByNo = {};
+    const picJobs = [];
+
+    for(const sheetName of wb.SheetNames){
+      const ws = wb.Sheets[sheetName]; if(!ws) continue;
+      const rows = XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+      // Kopfdaten
+      rows.slice(0,8).forEach(r=>{ (r||[]).forEach((v,c)=>{ const l=cellStr(v); const val=r[c+1];
+        if(l==="Part File:") program.partFile = cellStr(val);
+        if(l==="Units:") program.units = /inch/i.test(cellStr(val))? "inch":"mm";
+        if(l==="Total Run Time:") program.runTimeSec = excelTimeToSec(val);
+        if(l==="Name:") program.user = cellStr(val);
+      });});
+      // Blöcke
+      for(let r=0;r<rows.length;r++){
+        const row=rows[r]||[]; const c=row.findIndex(v=>cellStr(v)==="Operation"); if(c<0) continue;
+        const kv={}; const kc={};
+        for(let rr=Math.max(0,r-1); rr<=r+5 && rr<rows.length; rr++){ const rw=rows[rr]||[];
+          for(let cc=0; cc<rw.length-1; cc++){ const l=cellStr(rw[cc]); if(l && typeof rw[cc]==="string" && rw[cc+1]!=null && rw[cc+1]!=="" && !(l in kv)){ kv[l]=rw[cc+1]; kc[l]=XLSX.utils.encode_cell({r:rr,c:cc+1}); cc++; } } }
+        const opNo = num(kv["Operation"]); if(opNo==null) continue;
+        const toolNo = num(kv["Tool #"]);
+        const tcode = cellStr(kv["Tool Type"]); const dia = num(kv["Tool Dia."]);
+        if(toolNo!=null && !toolsByNo[toolNo]) toolsByNo[toolNo] = {toolNumber:toolNo, code:tcode, dia, lenReg:num(kv["LOFF #"]), radReg:num(kv["DOFF #"]??kv["Offset#"])};
+        const otype = cellStr(kv["Op. Type"]);
+        ops.push({
+          opNo, sheet:sheetName, rowIdx:r,
+          cells:{ rpm: kc["RPM"]||null, feed: kc["Con. Feed"]||kc["Feed/Rev"]||null },
+          toolNumber: toolNo,
+          name: (OP_CODES[otype]||otype||"Operation")+(toolNo!=null? " mit T"+toolNo:""),
+          type: OP_CODES[otype]||otype,
+          toolId: toolNo!=null? "T"+toolNo : null,
+          rpm: num(kv["RPM"]), feed: num(kv["Con. Feed"]??kv["Feed/Rev"]), entryFeed: num(kv["Entry Feed"]),
+          feedPerRev: kv["Con. Feed"]==null && kv["Feed/Rev"]!=null,
+          ap: num(kv["Step Depth"]), cutDepth: num(kv["Cut Depth"]), ae: null,
+          coolant: cellStr(kv["Coolant"]), timeSec: excelTimeToSec(kv["Time"]),
+          cs: num(kv["Coordinate"]), wg: num(kv["Workgroup"]), tpLength: num(kv["TP Length"]),
+          notes: ""
+        });
+        const dr = sheetDrawings[sheetName];
+        if(dr) picJobs.push({opNo, anchors: dr.anchors.filter(a=>Math.abs(a.row-r)<=2), zip, relMap: dr.relMap});
+      }
+    }
+    if(!ops.length){ toast("Im Report wurden keine Operationen gefunden"); return; }
+    ops.sort((a,b)=>a.opNo-b.opNo);
+
+    // Werkzeuge: Namen aus einem zuvor geladenen Makro-Export übernehmen, wenn vorhanden
+    const tools={};
+    Object.values(toolsByNo).forEach(t=>{
+      const id="T"+t.toolNumber; const j = jsonTools && Object.values(jsonTools).find(x=>x.number===t.toolNumber);
+      tools[id]={ id, number:t.toolNumber,
+        name: (j&&j.name) || ((TOOL_CODES[t.code]||t.code||"Werkzeug")+(t.dia!=null? " Ø "+t.dia:"")),
+        type: TOOL_CODES[t.code] ? TOOL_CODES[t.code]+" ("+t.code+")" : (t.code||""),
+        dia: t.dia ?? (j&&j.dia) ?? null, flutes: (j&&j.flutes)||null, holder:(j&&j.holder)||"", vendor:(j&&j.vendor)||"",
+        lenReg:t.lenReg, radReg:t.radReg };
+    });
+
+    const partName = program.partFile.replace(/\.vnc$/i,"") || file.name.replace(/\.xlsx$/i,"");
+    const raw = { schemaVersion:"1.0.0", exportKind:"gibbscam-report-xlsx", source:{reportFile:file.name, user:program.user},
+      program:{programId:partName, name:partName, units:program.units, estimatedCycleTimeSec:program.runTimeSec},
+      tools:Object.values(tools).map(t=>({toolId:t.id,toolNumber:t.number,name:t.name,gibbsToolCode:toolsByNo[t.number].code,diameter:t.dia,offsets:{lengthRegister:t.lenReg,radiusRegister:t.radReg}})),
+      operations:ops.map(o=>({opNo:o.opNo,name:o.name,operationCode:o.type,toolId:o.toolId,csNumber:o.cs,workgroup:o.wg,cuttingData:{spindleRpm:o.rpm,feed:o.feed,feedUnit:(o.feedPerRev? program.units+"/U" : program.units+"/min"),entryFeed:o.entryFeed,axialDepth:o.ap,cutDepth:o.cutDepth,coolant:o.coolant},estimatedTime:o.timeSec,toolpathLength:o.tpLength})) };
+
+    data = { programId:partName, name:partName, revision:"", material:"", units:program.units, tools, ops, raw };
+    reportBuf = buf; reportName = file.name; sheetPaths = {}; Object.entries(sheetDrawings).forEach(([k,v])=>sheetPaths[k]=v.path);
+    current=0; images={}; imageSets={}; imageView={};
+    loadOverrides();
+    $("#progLabel").textContent = data.name + (program.runTimeSec? " · Laufzeit "+fmtTime(program.runTimeSec):"");
+    render();
+
+    // Bilder: links (Spalte < 5) = Start, rechts = Ende
+    let n=0;
+    for(const job of picJobs){
+      const set={};
+      for(const a of job.anchors){
+        const target=job.relMap[a.rid]; if(!target) continue;
+        const path = target.startsWith("/") ? target.slice(1) : "xl/"+target.replace(/^\.\.\//,"");
+        const f=job.zip.file(path); if(!f) continue;
+        const ext=path.split(".").pop().toLowerCase();
+        const mime = ext==="bmp"?"image/bmp": ext==="jpg"||ext==="jpeg"?"image/jpeg": ext==="gif"?"image/gif":"image/png";
+        const blob=new Blob([await f.async("arraybuffer")],{type:mime});
+        set[a.col<5?"start":"end"]=URL.createObjectURL(blob);
+      }
+      if(set.start||set.end){ imageSets[job.opNo]=set; images[job.opNo]=set.end||set.start; imageView[job.opNo]=set.end?"end":"start"; n++; }
+    }
+    renderDetail();
+    toast(ops.length+" Operationen aus dem Report geladen"+(n? ", "+n+" mit Bild":""));
+  }catch(err){ console.error(err); toast("Report konnte nicht gelesen werden: "+err.message); }
+}
+
+async function mapSheetDrawings(zip){
+  const out={};
+  const parse = async p=>{ const f=zip.file(p); return f? new DOMParser().parseFromString(await f.async("string"),"application/xml") : null; };
+  const relsOf = async p=>{ const d=await parse(p); const m={}; if(d) [...d.getElementsByTagName("Relationship")].forEach(r=>m[r.getAttribute("Id")]={target:r.getAttribute("Target"),type:r.getAttribute("Type")||""}); return m; };
+  const wbx = await parse("xl/workbook.xml"); if(!wbx) return out;
+  const wbRels = await relsOf("xl/_rels/workbook.xml.rels");
+  for(const sh of [...wbx.getElementsByTagNameNS("*","sheet")]){
+    const name=sh.getAttribute("name"); const rid=sh.getAttribute("r:id")||sh.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id");
+    const t=wbRels[rid]?.target; if(!t) continue;
+    const sheetPath = t.startsWith("/")? t.slice(1) : "xl/"+t.replace(/^\/?xl\//,"");
+    out[name]={anchors:[],relMap:{},path:sheetPath};
+    const sheetRels = await relsOf(sheetPath.replace(/worksheets\/(sheet\d+\.xml)$/,"worksheets/_rels/$1.rels"));
+    const drawRel = Object.values(sheetRels).find(r=>/\/drawing$/.test(r.type)); if(!drawRel) continue;
+    const drawPath = drawRel.target.startsWith("/")? drawRel.target.slice(1) : "xl/"+drawRel.target.replace(/^\.\.\//,"");
+    const dx = await parse(drawPath); if(!dx) continue;
+    const relMapRaw = await relsOf(drawPath.replace(/drawings\/(drawing\d+\.xml)$/,"drawings/_rels/$1.rels"));
+    const relMap={}; Object.entries(relMapRaw).forEach(([k,v])=>relMap[k]=v.target);
+    const anchors=[];
+    [...dx.getElementsByTagNameNS("*","twoCellAnchor"),...dx.getElementsByTagNameNS("*","oneCellAnchor")].forEach(a=>{
+      const blip=a.getElementsByTagNameNS("*","blip")[0]; if(!blip) return;
+      const rid2=blip.getAttribute("r:embed")||blip.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","embed");
+      const from=a.getElementsByTagNameNS("*","from")[0]; if(!from) return;
+      const row=Number(from.getElementsByTagNameNS("*","row")[0]?.textContent||0), col=Number(from.getElementsByTagNameNS("*","col")[0]?.textContent||0);
+      anchors.push({rid:rid2,row,col});
+    });
+    out[name]={anchors,relMap,path:sheetPath};
+  }
+  return out;
+}
+$("#fileXlsx").addEventListener("change",e=>{ const f=e.target.files[0]; e.target.value=""; if(f) importReport(f); });
+
+// ---------- Speichern: Report-Kopie (_Op.xlsx) + Begleitdatei für das Makro (_Op.txt) ----------
+function changedRows(){
+  return data.ops.filter(o=>isChanged(o.opNo)).map(o=>{ const ov=overrides[o.opNo];
+    const rpm = o.rpm!=null ? Math.round(o.rpm*ov.rpmPct/100) : null;
+    const feed = o.feed!=null ? (o.feedPerRev ? Math.round(o.feed*ov.feedPct/100*10000)/10000 : Math.round(o.feed*ov.feedPct/100*100)/100) : null;
+    return {op:o, rpm, feed};
+  });
+}
+function buildTxt(rows){
+  // Eine Zeile je Operation, leerzeichengetrennt, Dezimalpunkt:
+  // OpNr WerkzeugNr Drehzahl Vorschub VorschubProUmdrehung(0/1) GeändertRPM(0/1) GeändertFeed(0/1)
+  return rows.map(r=>{ const ov=overrides[r.op.opNo];
+    return [r.op.opNo, r.op.toolNumber ?? (r.op.toolId? String(r.op.toolId).replace(/^T/,"") : 0), r.rpm ?? 0, r.feed ?? 0, r.op.feedPerRev?1:0, ov.rpmPct!==100?1:0, ov.feedPct!==100?1:0].join(" ");
+  }).join("\r\n")+"\r\n";
+}
+async function buildXlsxCopy(rows){
+  const zip = await JSZip.loadAsync(reportBuf);
+  const bySheet = {};
+  rows.forEach(r=>{ const ov=overrides[r.op.opNo]; if(!r.op.cells) return; const p=sheetPaths[r.op.sheet]; if(!p) return;
+    (bySheet[p] ||= []);
+    if(ov.rpmPct!==100 && r.op.cells.rpm && r.rpm!=null) bySheet[p].push({addr:r.op.cells.rpm, val:r.rpm});
+    if(ov.feedPct!==100 && r.op.cells.feed && r.feed!=null) bySheet[p].push({addr:r.op.cells.feed, val:r.feed});
+  });
+  for(const [p,edits] of Object.entries(bySheet)){
+    let xml = await zip.file(p).async("string");
+    edits.forEach(e=>{
+      const re = new RegExp('<(\\w+:)?c r="'+e.addr+'"([^>]*)>([\\s\\S]*?)</(?:\\w+:)?c>');
+      const m = xml.match(re);
+      if(m){
+        const p = m[1]||"";
+        const attrs = m[2].replace(/\s+t="[^"]*"/,"");
+        xml = xml.replace(re, '<'+p+'c r="'+e.addr+'"'+attrs+'><'+p+'v>'+e.val+'</'+p+'v></'+p+'c>');
+      }
+    });
+    zip.file(p, xml);
+  }
+  // Formel-Cache verwerfen, damit Excel nicht meckert
+  if(zip.file("xl/calcChain.xml")){ zip.remove("xl/calcChain.xml"); let ct = await zip.file("[Content_Types].xml").async("string"); zip.file("[Content_Types].xml", ct.replace(/<Override[^>]*calcChain\.xml"[^>]*\/>/,"")); let wr = await zip.file("xl/_rels/workbook.xml.rels").async("string"); zip.file("xl/_rels/workbook.xml.rels", wr.replace(/<Relationship[^>]*calcChain\.xml"[^>]*\/>/,"")); }
+  return zip.generateAsync({type:"uint8array", compression:"DEFLATE"});
+}
+async function saveAll(){
+  if(!data) return;
+  const rows = changedRows();
+  if(!rows.length){ toast("Keine Änderungen – nichts zu speichern"); return; }
+  const base = (reportName ? reportName.replace(/\.xlsx$/i,"") : (data.programId||"Ruestplan")).replace(/[\\\/:*?"<>|]+/g,"_") + "_Op";
+  const txt = buildTxt(rows);
+  if(!downloads){
+    try{ await navigator.clipboard.writeText(txt); toast("Speichern hier nicht möglich – Begleitdatei in die Zwischenablage kopiert"); }catch(e){ toast("Speichern in dieser Ansicht nicht möglich"); }
+    return;
+  }
+  let saved=0;
+  if(reportBuf){
+    // Beide Dateien in einem Paket, damit nur eine Bestätigung nötig ist
+    try{
+      const pack = new JSZip();
+      pack.file(base+".txt", txt);
+      pack.file(base+".xlsx", await buildXlsxCopy(rows));
+      const bytes = await pack.generateAsync({type:"uint8array", compression:"DEFLATE"});
+      await downloads.save({filename: base+".zip", data: bytes}); saved=2;
+    }catch(e){ if(e && e.code==="declined"){ toast("Speichern abgebrochen"); return; } toast("Paket konnte nicht erstellt werden: "+(e.message||"")); return; }
+  } else {
+    try{ await downloads.save({filename: base+".txt", data: txt}); saved=1; }
+    catch(e){ if(e && e.code==="declined"){ toast("Speichern abgebrochen"); return; } toast("Begleitdatei konnte nicht gespeichert werden"); return; }
+  }
+  toast(saved===2 ? rows.length+" Operationen gespeichert in "+base+".zip (.xlsx + .txt)" : base+".txt gespeichert");
+}
+$("#btnSave").onclick = saveAll;
+
+// Export der Änderungen: Export-JSON plus Feedback-Block
+async function exportChanges(){
+  if(!data) return;
+  const out = JSON.parse(JSON.stringify(data.raw));
+  out.shopfloorFeedback = {
+    createdAt: new Date().toISOString(),
+    overrides: data.ops.filter(o=>isChanged(o.opNo)).map(o=>{const ov=overrides[o.opNo]; return {
+      opNo:o.opNo, name:o.name, toolId:o.toolId,
+      feed:{programmed:o.feed, percent:ov.feedPct, actual:o.feed!=null? Math.round(o.feed*ov.feedPct/100):null},
+      rpm:{programmed:o.rpm, percent:ov.rpmPct, actual:o.rpm!=null? Math.round(o.rpm*ov.rpmPct/100):null}
+    };})
+  };
+  const text = JSON.stringify(out,null,2);
+  const filename = (data.programId||"export").replace(/[^\w.-]+/g,"_")+".feedback.json";
+  if(downloads){
+    try{ await downloads.save({filename, data:text}); toast("Datei gespeichert"); return; }
+    catch(e){ if(e && e.code!=="declined") toast("Speichern nicht möglich – in Zwischenablage kopiert"); else return; }
+  }
+  try{ await navigator.clipboard.writeText(text); toast("JSON in die Zwischenablage kopiert"); }
+  catch(e){ toast("Export nicht möglich in dieser Ansicht"); }
+}
+$("#btnExport").onclick = exportChanges;
+
+// Speichern: in claude.ai über die Download-Capability, sonst Browser-Download
+// bzw. iOS-Teilen-Menü (Dateien, AirDrop, Mail).
+async function browserSave({filename, data}){
+  const mime = /\.zip$/i.test(filename) ? "application/zip" : /\.xlsx$/i.test(filename) ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : /\.json$/i.test(filename) ? "application/json" : "text/plain";
+  const blob = data instanceof Blob ? data : new Blob([data],{type:mime});
+  const file = new File([blob], filename, {type:mime});
+  if(navigator.canShare && navigator.canShare({files:[file]}) && /iPhone|iPad/i.test(navigator.userAgent)){
+    try{ await navigator.share({files:[file], title:filename}); return {status:"saved"}; }
+    catch(e){ if(e && e.name==="AbortError") throw {code:"declined"}; }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  return {status:"saved"};
+}
+downloads = { save: browserSave };
+if(window.claude && typeof window.claude.use==="function"){
+  window.claude.use("downloads").then(d=>{ if(d) downloads = d; }).catch(()=>{});
+}
+if("serviceWorker" in navigator && location.protocol==="https:"){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+
+// ---------- Beispieldaten ----------
+const DEMO = {
+  schemaVersion:"1.0.0",
+  program:{programId:"4711-Gehaeuse-OP10",name:"Gehäuse OP10",revision:"C",material:{name:"42CrMo4"}},
+  tools:[
+    {toolId:"T01-SF-D12",toolNumber:1,name:"Schaftfräser D12 Z4 VHM",toolType:"end_mill",diameterMm:12,fluteCount:4,holder:{name:"HSK-A63 Schrumpffutter"},offsets:{lengthRegister:1,radiusRegister:1}},
+    {toolId:"T02-BO-D8.5",toolNumber:2,name:"VHM-Bohrer D8.5 IK",toolType:"drill",diameterMm:8.5,fluteCount:2,holder:{name:"HSK-A63 Hydrodehnfutter"},offsets:{lengthRegister:2}},
+    {toolId:"T03-GB-M10",toolNumber:3,name:"Gewindebohrer M10 6H",toolType:"tap",diameterMm:10,holder:{name:"HSK-A63 Synchro-Futter"},offsets:{lengthRegister:3}}
+  ],
+  operations:[
+    {opNo:1,name:"Planen Oberseite",operationType:"facing",setupNo:1,toolId:"T01-SF-D12",cuttingData:{spindleRpm:4800,feedMmMin:1900,axialDepthMm:1,radialWidthMm:8,coolant:"flood"},estimatedTimeSec:120},
+    {opNo:2,name:"Tasche schruppen",operationType:"roughing",setupNo:1,toolId:"T01-SF-D12",cuttingData:{spindleRpm:5300,feedMmMin:2100,axialDepthMm:18,radialWidthMm:1.2,coolant:"flood"},estimatedTimeSec:420,notes:"Trochoidal – bei Rattern nicht unter 80 % fahren"},
+    {opNo:3,name:"Bohren 6x D8.5",operationType:"drilling",setupNo:1,toolId:"T02-BO-D8.5",cuttingData:{spindleRpm:3700,feedMmMin:740,coolant:"through_tool"},estimatedTimeSec:95},
+    {opNo:4,name:"Gewinde 6x M10",operationType:"tapping",setupNo:1,toolId:"T03-GB-M10",cuttingData:{spindleRpm:600,feedMmMin:900,coolant:"flood"},estimatedTimeSec:40}
+  ]
+};
+
+render();
+})();
+</script>
+</body>
+</html>
